@@ -2,7 +2,20 @@
 
 Real-time APCO P25 trunking telemetry, subscriber monitor, and forensics dashboard fed by OP25's HTTP status endpoint.
 
+> Inspired by [**colonelpanichacks/trunk-tap**](https://github.com/colonelpanichacks/trunk-tap), adapting its tactical telemetry dashboard, call history, and forensic insights for OP25 systems.
+
 Built with a **Python FastAPI** backend (REST + WebSockets) and a modern **Vite + React / TypeScript** tactical frontend.
+
+---
+
+## Prerequisites
+
+**`op25-tap` requires a fully working installation of OP25 by boatbod:**
+
+- **OP25 by boatbod**: [https://github.com/boatbod/op25](https://github.com/boatbod/op25)
+  - Ensure OP25 is installed, configured for your local SDR (RTL-SDR, HackRF, Airspy, etc.), and actively decoding your target trunked radio system.
+  - **HTTP Server**: OP25 must be launched with its HTTP server status endpoint enabled (e.g. `-l http:0.0.0.0:8080` in `rx.py` or `multi_rx.py`). This is the status feed that `op25-tap` polls.
+  - **Live Audio & Transcription (Optional)**: If you want live browser audio streaming and remote Whisper speech-to-text transcription, ensure OP25's raw audio forwarding is enabled (e.g. `-V` flags forwarding 8 kHz mono raw PCM to port `9000`).
 
 ---
 
@@ -127,3 +140,11 @@ op25-tap/
 ├── Dockerfile            # Multi-stage Docker build
 └── docker-compose.yml
 ```
+
+---
+
+## Acknowledgments & Credits
+
+- [**colonelpanichacks/trunk-tap**](https://github.com/colonelpanichacks/trunk-tap) — The pioneer SDRTrunk forensics dashboard whose architecture, anomaly tracking patterns, and UI philosophy directly inspired `op25-tap`.
+- [**boatbod/op25**](https://github.com/boatbod/op25) — The foundational open-source OP25 software-defined radio implementation for P25 Phase 1 / Phase 2 digital trunking and HTTP telemetry reporting.
+

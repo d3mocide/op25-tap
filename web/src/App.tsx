@@ -197,6 +197,10 @@ export function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span>Protocol: <strong style={{ color: 'var(--text-muted)' }}>APCO-25 Phase 1 / 2</strong></span>
           <span>Target: <strong className="mono" style={{ color: 'var(--text-muted)' }}>{telemetry.target_url ? telemetry.target_url.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Connected'}</strong></span>
+          <span style={{ color: 'var(--border-subtle)' }}>|</span>
+          <span>Inspired by <a href="https://github.com/colonelpanichacks/trunk-tap" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>trunk-tap</a></span>
+          <span style={{ color: 'var(--border-subtle)' }}>|</span>
+          <span>Engine: <a href="https://github.com/boatbod/op25" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>boatbod/op25</a></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span>WebSocket Stream: <strong style={{ color: wsConnected ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>{wsConnected ? 'Connected' : 'Reconnecting...'}</strong></span>
