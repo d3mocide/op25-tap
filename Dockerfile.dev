@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    OP25TAP_DATA_DIR=/app/data
+
+# Install dependencies first (cached layer)
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# In dev mode, source code (api, ingest, db, config) is mounted via volumes
+# Create data dir
+RUN mkdir -p /app/data/db /app/data/audio_calls
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

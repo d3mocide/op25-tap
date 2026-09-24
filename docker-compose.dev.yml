@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: op25-tap-backend-dev
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - OP25TAP_DATA_DIR=/app/data
+    volumes:
+      - ./api:/app/api
+      - ./ingest:/app/ingest
+      - ./db:/app/db
+      - ./config:/app/config
+      - ./data:/app/data
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    container_name: op25-tap-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_HOST=backend
+    volumes:
+      - ./web:/app/web
+      - /app/web/node_modules
+    depends_on:
+      - backend

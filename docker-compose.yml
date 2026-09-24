@@ -1,0 +1,14 @@
+services:
+  op25-tap:
+    build: .
+    container_name: op25-tap
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - OP25TAP_DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config

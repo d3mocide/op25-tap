@@ -1,0 +1,384 @@
+:root {
+  /* OP25 Tactical Charcoal / Gunmetal Palette */
+  --bg-primary: #0b0c0f;
+  --bg-secondary: #121318;
+  --bg-card: #14151a;
+  --bg-card-hover: #191b22;
+  --bg-header-gradient: linear-gradient(180deg, #25272f 0%, #17181e 100%);
+  --bg-button-gradient: linear-gradient(180deg, #2b2e36 0%, #1a1c22 100%);
+  --bg-button-active: linear-gradient(180deg, #1f2a38 0%, #111a24 100%);
+  
+  --border-subtle: #252730;
+  --border-header: #2d303b;
+  --border-button: #3c3f4c;
+  --border-highlight: rgba(0, 229, 255, 0.4);
+
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+
+  /* OP25 Accent Colors */
+  --accent-cyan: #00e5ff;
+  --accent-blue: #38bdf8;
+  --accent-amber: #f59e0b;
+  --accent-gold: #fbbf24;
+  --accent-emerald: #10b981;
+  --accent-fire: #f87171;
+  --accent-purple: #c084fc;
+
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbars matching dark UI */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0e0f13;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d303a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #474b57;
+}
+
+/* OP25 Beveled Panels */
+.glass-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.15s ease;
+}
+
+.panel-header {
+  background: var(--bg-header-gradient);
+  border-bottom: 1px solid var(--border-header);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.badge-cyan {
+  background: rgba(0, 229, 255, 0.1);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+}
+
+.badge-amber {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent-amber);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.badge-emerald {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.badge-rose {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--accent-fire);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.badge-muted {
+  background: #1e2027;
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Pulse animation */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.9; }
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background-color: var(--accent-emerald);
+  box-shadow: 0 0 8px var(--accent-emerald);
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+.pulse-dot.inactive {
+  background-color: var(--text-dim);
+  box-shadow: none;
+  animation: none;
+}
+
+.pulse-dot.transmitting {
+  background-color: var(--accent-amber);
+  box-shadow: 0 0 10px var(--accent-amber);
+  animation: pulse-ring 1s infinite ease-in-out;
+}
+
+/* OP25 3D Beveled Buttons (like SCAN, HOLD, LOCKOUT) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-button);
+  background: var(--bg-button-gradient);
+  color: var(--text-main);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.btn:hover {
+  background: linear-gradient(180deg, #353842 0%, #20222a 100%);
+  border-color: #505463;
+  color: #ffffff;
+}
+
+.btn:active {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #0d3846 0%, #08212a 100%);
+  color: var(--accent-cyan);
+  border-color: rgba(0, 229, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(0, 229, 255, 0.2), 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(180deg, #134e62 0%, #0d3544 100%);
+  border-color: var(--accent-cyan);
+  color: #ffffff;
+}
+
+.btn-active {
+  background: var(--bg-button-active);
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 10px rgba(0, 229, 255, 0.2);
+}
+
+/* Tab navigation badges */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  min-width: 18px;
+  height: 16px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-dim);
+  line-height: 1;
+  transition: all 0.12s ease;
+}
+
+.btn:hover .tab-badge {
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.btn-active .tab-badge {
+  background: rgba(0, 229, 255, 0.18);
+  border-color: rgba(0, 229, 255, 0.4);
+  color: var(--accent-cyan);
+}
+
+.tab-badge-rose {
+  background: rgba(248, 113, 113, 0.18) !important;
+  border-color: rgba(248, 113, 113, 0.45) !important;
+  color: var(--accent-fire) !important;
+}
+
+.btn-active .tab-badge-rose {
+  background: rgba(248, 113, 113, 0.28) !important;
+  border-color: rgba(248, 113, 113, 0.6) !important;
+  color: #ff6b6b !important;
+}
+
+/* Inputs */
+.input-search {
+  background: #0f1014;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  padding: 5px 10px;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+
+.input-search:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.25);
+}
+
+/* Tables styled exactly like OP25 Call History */
+.tactical-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.tactical-table th {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-header);
+  background: var(--bg-header-gradient);
+  user-select: none;
+}
+
+.tactical-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #1a1c22;
+  color: var(--text-main);
+}
+
+.tactical-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.tactical-table tr:hover td {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Tactical Audio Station & Visualizer */
+.audio-station {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, #161820 0%, #0d0e13 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  height: 44px;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s ease;
+}
+
+.audio-station.active {
+  border-color: rgba(0, 229, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 14px rgba(0, 229, 255, 0.12);
+}
+
+
+.audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 60px;
+  height: 4px;
+  border-radius: 2px;
+  background: #252834;
+  outline: none;
+  cursor: pointer;
+}
+
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.audio-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.audio-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+  cursor: pointer;
+}
+
+/* Subscriber Card Grid */
+.subscriber-card {
+  background: rgba(18, 20, 26, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.subscriber-card:hover {
+  background: rgba(25, 28, 36, 0.9);
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+

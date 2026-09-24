@@ -1,0 +1,10 @@
+{
+  "comment": "Copy to op25.json. endpoints: one per OP25 instance. systems maps a NAC (hex string, as OP25 reports it) or sysid to a canonical system name; unmatched systems become 'OP25 <nac>'.",
+  "endpoints": [
+    { "url": "http://127.0.0.1:8080/", "poll_interval": 1.0 }
+  ],
+  "hold_seconds": 3.0,
+  "systems": {
+    "0x293": "Countywide"
+  }
+}
