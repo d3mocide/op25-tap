@@ -2,12 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { Search, Zap } from 'lucide-react';
 import type { EventItem } from '../types';
 import { formatSystemLabel, getSystemColor, getTalkgroupCategory, getTalkgroupColor } from '../utils/colors';
+import { formatTs } from '../utils/time';
 
 interface LiveEventFeedProps {
   events: EventItem[];
+  historical?: boolean;
 }
 
-export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events }) => {
+export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical = false }) => {
   const [filter, setFilter] = useState('');
 
   // Guarantee strict descending order (newest first) and deduplication
@@ -61,10 +63,7 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events }) => {
     );
   });
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
+  const formatTime = (ts: number) => formatTs(ts);
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -73,7 +72,7 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Zap size={15} color="var(--accent-cyan)" />
           <h2 style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0, color: 'var(--text-main)' }}>
-            Call History — Real-Time Stream
+            {historical ? 'Call History' : 'Call History — Real-Time Stream'}
           </h2>
           <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{filtered.length}</span>
         </div>

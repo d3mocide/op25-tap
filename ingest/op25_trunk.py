@@ -520,8 +520,10 @@ class Op25Poller:
 
         # One transaction per poll: wuid_data alone can mean hundreds of upserts,
         # which would otherwise each be committed individually.
+        # IMMEDIATE takes the write lock up front so a concurrent writer (maintenance
+        # purge, Whisper) makes us wait on busy_timeout instead of failing the poll.
         c = db()
-        c.execute("BEGIN")
+        c.execute("BEGIN IMMEDIATE")
         try:
             self._process_in_txn(items, now)
             c.execute("COMMIT")

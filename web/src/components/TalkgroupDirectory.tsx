@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Radio, Search, Shield } from 'lucide-react';
 import type { Talkgroup } from '../types';
+import { formatTs } from '../utils/time';
 
 interface TalkgroupDirectoryProps {
   talkgroups: Talkgroup[];
@@ -28,11 +29,7 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
     return `${min}m ${remSec}s`;
   };
 
-  const formatLastSeen = (ts: number) => {
-    if (!ts) return '—';
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' });
-  };
+  const formatLastSeen = (ts: number) => formatTs(ts, false);
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
