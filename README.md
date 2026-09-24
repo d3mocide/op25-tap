@@ -52,7 +52,7 @@ Visit **`http://localhost:8000/`** in your browser.
 # Start dev instance with live UI hot-reload and backend auto-reload
 docker compose -f docker-compose.dev.yml up --build -d
 ```
-Visit **`http://localhost:5173/`** in your browser. Any edits in `web/src/` or backend Python files update live instantly without rebuilding the container!
+Visit **`http://localhost:5173/`** in your browser (or the `FRONTEND_PORT` you set). Any edits in `web/src/` or backend Python files update live instantly without rebuilding the container!
 
 
 ### Running Locally
@@ -100,7 +100,8 @@ cp .env.example .env
 | `OP25_HOLD_SECONDS`  | `3.0`                 | Hang time before an inactive call is considered closed      |
 | `OP25_SYSTEM_NAME`   | `County P25`          | Default human-readable label if OP25 reports no system name |
 | `HOST`               | `0.0.0.0`             | API server host binding                                     |
-| `PORT`               | `8000`                | API server port binding                                     |
+| `PORT`               | `8000`                | Port for the API + web UI (production serves both on this one port) |
+| `FRONTEND_PORT`      | `5173`                | Dev only: Vite hot-reload UI port (`docker-compose.dev.yml`, `npm run dev`) |
 | `OP25TAP_DATA_DIR`   | `./data`              | Directory for persistent SQLite databases and cache         |
 | `WHISPER_URL`        | _(disabled)_          | Remote OpenAI-compatible Whisper transcription URL          |
 | `WHISPER_MODEL`      | `base.en`             | Whisper model name passed to remote API                     |
