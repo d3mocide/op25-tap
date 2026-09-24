@@ -227,6 +227,10 @@ def wipe():
         _INITIALIZED = False
 
 
+def set_event_audio_file(event_id: int, audio_file: Optional[str]):
+    db().execute("UPDATE events SET audio_file=? WHERE id=?", (audio_file, event_id))
+
+
 def update_event_transcript(event_id: int, transcript: str, audio_file: Optional[str] = None):
     c = db()
     if audio_file:

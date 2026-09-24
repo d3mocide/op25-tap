@@ -13,7 +13,7 @@ import wave
 from dotenv import load_dotenv
 import websockets
 
-from db import DATA_DIR
+from db import DATA_DIR, set_event_audio_file
 from ingest.whisper_client import WhisperDispatcher
 
 load_dotenv()
@@ -142,8 +142,11 @@ class AudioRecorder:
             try:
                 audio_path.write_bytes(wav_bytes)
                 saved_rel_path = f"audio_calls/{audio_filename}"
+                # Record playback availability now, independent of whether
+                # transcription is configured or later succeeds.
+                set_event_audio_file(event_id, saved_rel_path)
             except Exception as e:
-                logger.warning(f"Could not write call audio file {audio_path}: {e}")
+                logger.warning(f"Could not save call audio {audio_path}: {e}")
 
         # Enqueue for Whisper transcription
         if self.whisper_dispatcher:
@@ -163,6 +166,8 @@ class AudioRecorder:
                 try:
                     if now - p.stat().st_mtime > max_age_sec:
                         p.unlink(missing_ok=True)
+                        if p.stem.isdigit():
+                            set_event_audio_file(int(p.stem), None)
                 except OSError:
                     pass
         except Exception as e:

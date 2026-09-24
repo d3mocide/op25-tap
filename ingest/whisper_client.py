@@ -73,12 +73,6 @@ class WhisperDispatcher:
     def enqueue_call(self, event_id: int, wav_bytes: bytes, audio_file: Optional[str] = None):
         """Enqueue call WAV audio for asynchronous transcription."""
         if not self.is_configured():
-            # If not configured, we still record audio_file in database if available
-            if audio_file:
-                try:
-                    update_event_transcript(event_id, "", audio_file=audio_file)
-                except Exception as e:
-                    logger.debug(f"Could not record audio file in db: {e}")
             return
 
         try:

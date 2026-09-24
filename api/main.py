@@ -116,6 +116,8 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down API server...")
+    if poller_instance:
+        poller_instance.stop()
     if audio_recorder_instance:
         audio_recorder_instance.stop()
     if whisper_dispatcher_instance:
@@ -124,11 +126,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="op25-tap API", lifespan=lifespan)
 
-# Allow CORS for development (Vite dev server)
+# Allow CORS for development (Vite dev server). No cookies/auth are used, so
+# credentials stay off (a wildcard origin with credentials is rejected by browsers).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -449,6 +452,8 @@ async def websocket_audio_proxy(client_ws: WebSocket):
                 try:
                     while True:
                         msg = await client_ws.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            return
                         if "bytes" in msg and msg["bytes"]:
                             await op25_ws.send(msg["bytes"])
                         elif "text" in msg and msg["text"]:
@@ -456,7 +461,12 @@ async def websocket_audio_proxy(client_ws: WebSocket):
                 except Exception:
                     pass
 
-            await asyncio.gather(forward_to_client(), forward_to_op25())
+            # When either side goes away, tear down the other instead of leaving
+            # the upstream socket open until its next failed send.
+            tasks = [asyncio.create_task(forward_to_client()), asyncio.create_task(forward_to_op25())]
+            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception as e:

@@ -130,6 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_events_sys    ON events(system_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_events_from   ON events(from_rid);
 CREATE INDEX IF NOT EXISTS idx_events_to_tg  ON events(to_tgid);
 CREATE INDEX IF NOT EXISTS idx_events_type   ON events(event_type);
+-- Serves the "same call within a few seconds" lookups in the poller and /api/events.
+CREATE INDEX IF NOT EXISTS idx_events_freq_tg ON events(frequency, to_tgid, ts);
 -- Synthetic event_id is the dedup key so a repeated
 -- poll sighting does not double-insert.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_events_evid ON events(system_id, event_id)

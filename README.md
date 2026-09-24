@@ -61,7 +61,8 @@ uv venv
 uv pip install -r requirements.txt
 
 # Start backend server (serves API and compiled frontend at http://localhost:8000)
-.venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port 8000
+# (Windows: .venv\Scripts\uvicorn.exe ...)
+.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 #### 2. Development Mode with Frontend Hot-Reload
