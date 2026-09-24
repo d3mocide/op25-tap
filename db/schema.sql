@@ -1,8 +1,13 @@
 -- op25-tap schema (adapted from trunk-tap; decoder-agnostic structure).
 -- Fed by OP25 status-endpoint poll-and-diff rather than SDRTrunk CSV tails.
--- affiliations/denies/patches stay empty unless a richer OP25 source is found;
--- adjacent_sites may be fed from trunk_update adjacent_data (verify).
 -- events.event_id is synthetic: "<freq>-<tgid>-<srcaddr>-<start_epoch>".
+--
+-- This file is the current schema for fresh databases. Existing databases are
+-- upgraded by the numbered migrations in db/__init__.py (PRAGMA user_version).
+--
+-- Retention: events, affiliations, roaming and anomalies are raw history and are
+-- purged after RETENTION_DAYS (ingest/maintenance.py). The daily_* rollups and the
+-- systems/sites/talkgroups/radios directories are kept indefinitely.
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -64,47 +69,7 @@ CREATE TABLE IF NOT EXISTS radios (
     UNIQUE(system_id, rid)
 );
 
--- completed calls (from RDIO Scanner protocol POSTs, includes audio ref)
-CREATE TABLE IF NOT EXISTS calls (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts            REAL NOT NULL,
-    system_id     INTEGER REFERENCES systems(id),
-    site_id       INTEGER REFERENCES sites(id),
-    talkgroup_id  INTEGER REFERENCES talkgroups(id),
-    tgid          INTEGER,
-    source_rid    INTEGER,
-    sources_json  TEXT,               -- all RIDs that transmitted
-    frequency     INTEGER,
-    frequencies_json TEXT,             -- freq hops during call
-    duration_ms   INTEGER,
-    encrypted     INTEGER DEFAULT 0,
-    patches_json  TEXT,
-    audio_path    TEXT,                -- path under audio_calls/
-    audio_type    TEXT,                -- mp3, wav
-    audio_bytes   INTEGER,
-    raw_json      TEXT,                -- full payload for forensics
-    transcript          TEXT,          -- Whisper output (NULL until transcribed)
-    transcript_engine   TEXT,          -- "mlx-whisper", "whisper.cpp", ...
-    transcript_model    TEXT,          -- "large-v3-turbo", etc.
-    transcript_lang     TEXT,
-    transcript_ms       INTEGER,       -- wall time to transcribe
-    transcript_at       REAL,
-    transcript_confidence REAL,
-    transcribe_state    TEXT DEFAULT 'pending'   -- pending | done | skipped | failed
-);
-CREATE INDEX IF NOT EXISTS idx_calls_ts        ON calls(ts DESC);
-CREATE INDEX IF NOT EXISTS idx_calls_tgid      ON calls(system_id, tgid);
-CREATE INDEX IF NOT EXISTS idx_calls_rid       ON calls(system_id, source_rid);
-CREATE INDEX IF NOT EXISTS idx_calls_site      ON calls(site_id);
-CREATE INDEX IF NOT EXISTS idx_calls_encrypted ON calls(encrypted);
-CREATE INDEX IF NOT EXISTS idx_calls_transcribe ON calls(transcribe_state, ts);
--- Plain (non-contentless) FTS5 so we can UPDATE/DELETE freely.
-CREATE VIRTUAL TABLE IF NOT EXISTS calls_fts USING fts5(
-    transcript, tg_label, tg_group, system_label
-);
-
--- generic trunking events (from CSV tail: register, response, group call grant,
--- unit call, data call, patch, adjacent site, denied grant, etc.)
+-- call events synthesized from OP25 channel/frequency state and call_log
 CREATE TABLE IF NOT EXISTS events (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     ts            REAL NOT NULL,
@@ -148,6 +113,7 @@ CREATE TABLE IF NOT EXISTS affiliations (
 );
 CREATE INDEX IF NOT EXISTS idx_aff_rid ON affiliations(rid, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_aff_tg  ON affiliations(tgid, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_aff_ts  ON affiliations(ts);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_aff_exact ON affiliations(system_id, rid, tgid, ts);
 
 -- roaming: RID observed at which site over time
@@ -160,26 +126,7 @@ CREATE TABLE IF NOT EXISTS roaming (
 );
 CREATE INDEX IF NOT EXISTS idx_roam_rid  ON roaming(rid, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_roam_site ON roaming(site_id, ts DESC);
-
--- patches (TG patched to TG)
-CREATE TABLE IF NOT EXISTS patches (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts           REAL NOT NULL,
-    system_id    INTEGER REFERENCES systems(id),
-    supergroup   INTEGER,
-    child_tgs    TEXT             -- JSON array of TGIDs
-);
-
--- denied grants (censored / busy / DENY events)
-CREATE TABLE IF NOT EXISTS denies (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts           REAL NOT NULL,
-    system_id    INTEGER REFERENCES systems(id),
-    site_id      INTEGER REFERENCES sites(id),
-    rid          INTEGER,
-    tgid         INTEGER,
-    reason       TEXT
-);
+CREATE INDEX IF NOT EXISTS idx_roam_ts   ON roaming(ts);
 
 -- adjacent-site broadcasts (network topology inference)
 CREATE TABLE IF NOT EXISTS adjacent_sites (
@@ -208,9 +155,40 @@ CREATE TABLE IF NOT EXISTS anomalies (
 CREATE INDEX IF NOT EXISTS idx_anom_ts   ON anomalies(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_anom_kind ON anomalies(kind, ts DESC);
 
--- ingest log (bookkeeping for tailed files)
-CREATE TABLE IF NOT EXISTS ingest_state (
-    path         TEXT PRIMARY KEY,
-    offset       INTEGER NOT NULL DEFAULT 0,
-    last_ts      REAL
+-- ---- Daily rollups (kept indefinitely) ------------------------------------
+-- Rebuilt idempotently from events by ingest/maintenance.py for any day that
+-- still has raw events, so they survive event retention. `day` is the server's
+-- local calendar date (YYYY-MM-DD); set TZ in Docker to control it.
+CREATE TABLE IF NOT EXISTS daily_system_stats (
+    day             TEXT NOT NULL,
+    system_id       INTEGER NOT NULL REFERENCES systems(id),
+    calls           INTEGER NOT NULL DEFAULT 0,
+    airtime_ms      INTEGER NOT NULL DEFAULT 0,
+    encrypted_calls INTEGER NOT NULL DEFAULT 0,
+    unique_rids     INTEGER NOT NULL DEFAULT 0,
+    unique_tgs      INTEGER NOT NULL DEFAULT 0,
+    anomalies       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, system_id)
 );
+
+CREATE TABLE IF NOT EXISTS daily_tg_stats (
+    day             TEXT NOT NULL,
+    system_id       INTEGER NOT NULL REFERENCES systems(id),
+    tgid            INTEGER NOT NULL,
+    calls           INTEGER NOT NULL DEFAULT 0,
+    airtime_ms      INTEGER NOT NULL DEFAULT 0,
+    encrypted_calls INTEGER NOT NULL DEFAULT 0,
+    unique_rids     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, system_id, tgid)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_tg ON daily_tg_stats(system_id, tgid, day);
+
+CREATE TABLE IF NOT EXISTS daily_rid_stats (
+    day             TEXT NOT NULL,
+    system_id       INTEGER NOT NULL REFERENCES systems(id),
+    rid             INTEGER NOT NULL,
+    calls           INTEGER NOT NULL DEFAULT 0,
+    airtime_ms      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, system_id, rid)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_rid ON daily_rid_stats(system_id, rid, day);
