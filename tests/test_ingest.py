@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # Ensure root is in path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -26,7 +28,9 @@ def test_samples_ingest():
     poller = Op25Poller("http://mock", cfg={"hold_seconds": 2.0}, event_callback=on_event)
 
     sample_files = sorted(glob.glob(str(ROOT / "samples" / "*.json")))
-    assert len(sample_files) > 0, "No sample files found in samples/"
+    if not sample_files:
+        # samples/ is gitignored; capture some with scripts/capture_samples.py
+        pytest.skip("No captured OP25 samples in samples/")
     print(f"Testing ingest on {len(sample_files)} sample files...")
 
     for fpath in sample_files:

@@ -1,10 +1,12 @@
 import asyncio
 import json
 import logging
+import math
 import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -16,8 +18,9 @@ from fastapi.staticfiles import StaticFiles
 import requests
 import websockets
 
-from db import DATA_DIR, db, init_db
+from db import CALL_EVENT_FILTER, DATA_DIR, db, init_db
 from ingest.audio_recorder import AudioRecorder
+from ingest.maintenance import MaintenanceWorker
 from ingest.op25_trunk import Op25Poller, load_config
 from ingest.whisper_client import WhisperDispatcher
 
@@ -67,13 +70,18 @@ poller_instance: Optional[Op25Poller] = None
 poller_thread: Optional[threading.Thread] = None
 audio_recorder_instance: Optional[AudioRecorder] = None
 whisper_dispatcher_instance: Optional[WhisperDispatcher] = None
+maintenance_instance: Optional[MaintenanceWorker] = None
 
 
 # ---- Lifespan Background Poller & Audio Pipeline ----------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global poller_instance, poller_thread, audio_recorder_instance, whisper_dispatcher_instance
+    global poller_instance, poller_thread, audio_recorder_instance, whisper_dispatcher_instance, maintenance_instance
     init_db()
+
+    # Rollups, retention purge and audio pruning
+    maintenance_instance = MaintenanceWorker()
+    maintenance_instance.start()
     manager.loop = asyncio.get_running_loop()
 
     cfg = load_config()
@@ -116,6 +124,10 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("Shutting down API server...")
+    if poller_instance:
+        poller_instance.stop()
+    if maintenance_instance:
+        maintenance_instance.stop()
     if audio_recorder_instance:
         audio_recorder_instance.stop()
     if whisper_dispatcher_instance:
@@ -124,11 +136,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="op25-tap API", lifespan=lifespan)
 
-# Allow CORS for development (Vite dev server)
+# Allow CORS for development (Vite dev server). No cookies/auth are used, so
+# credentials stay off (a wildcard origin with credentials is rejected by browsers).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -144,17 +157,35 @@ def get_status():
     return poller_instance.latest_status
 
 
+# Time-range query params. `from`/`to` are epoch seconds; `to` is exclusive.
+FromTs = Query(None, alias="from", description="Range start (epoch seconds, inclusive)")
+ToTs = Query(None, alias="to", description="Range end (epoch seconds, exclusive)")
+
+
+def _add_range(query: str, params: List[Any], col: str, from_ts: Optional[float], to_ts: Optional[float]) -> str:
+    if from_ts is not None:
+        query += f" AND {col} >= ?"
+        params.append(from_ts)
+    if to_ts is not None:
+        query += f" AND {col} < ?"
+        params.append(to_ts)
+    return query
+
+
 @app.get("/api/events")
 def get_events(
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     tgid: Optional[int] = None,
     rid: Optional[int] = None,
     since: Optional[float] = None,
+    from_ts: Optional[float] = FromTs,
+    to_ts: Optional[float] = ToTs,
+    before: Optional[float] = Query(None, description="Keyset cursor: only events with ts < before"),
 ):
-    """Recent synthesized and decoded call events with pagination and filters."""
+    """Call events, newest first, with filters, time range and keyset pagination."""
     c = db()
-    query = """
+    query = f"""
         SELECT e.id, e.ts, e.system_id, s.name as system_name, COALESCE(s.label, s.name) as system, e.site_id,
                COALESCE(st.name, st.site_id) as site_str, e.protocol, e.event_type as type,
                e.from_rid as "from", e.from_rid, r.alias as from_alias,
@@ -167,18 +198,7 @@ def get_events(
         LEFT JOIN sites st ON e.site_id = st.id
         LEFT JOIN talkgroups tg ON e.system_id = tg.system_id AND e.to_tgid = tg.tgid
         LEFT JOIN radios r ON e.system_id = r.system_id AND e.from_rid = r.rid
-        WHERE e.to_tgid IS NOT NULL
-          AND NOT (
-              e.duration_ms = 0
-              AND EXISTS (
-                  SELECT 1 FROM events e2
-                  WHERE e2.id != e.id
-                    AND e2.frequency = e.frequency
-                    AND e2.to_tgid = e.to_tgid
-                    AND ABS(e2.ts - e.ts) <= 6.0
-                    AND e2.duration_ms > 0
-              )
-          )
+        WHERE {CALL_EVENT_FILTER}
     """
     params: List[Any] = []
     if tgid is not None:
@@ -190,6 +210,10 @@ def get_events(
     if since is not None:
         query += " AND e.ts > ?"
         params.append(since)
+    if before is not None:
+        query += " AND e.ts < ?"
+        params.append(before)
+    query = _add_range(query, params, "e.ts", from_ts, to_ts)
 
     query += " ORDER BY e.ts DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
@@ -199,56 +223,108 @@ def get_events(
 
 
 @app.get("/api/talkgroups")
-def get_talkgroups(limit: int = Query(200, ge=1, le=1000), search: Optional[str] = None):
-    """List talkgroups with call stats and labels."""
+def get_talkgroups(
+    limit: int = Query(200, ge=1, le=1000),
+    search: Optional[str] = None,
+    from_ts: Optional[float] = FromTs,
+    to_ts: Optional[float] = ToTs,
+):
+    """Talkgroups with call stats. Lifetime directory by default; with a range,
+    call_count/total_ms/first_seen/last_seen are computed from that range's events."""
     c = db()
-    query = """
-        SELECT tg.id, tg.system_id, s.name as system_name, tg.tgid, tg.alias,
-               tg.tg_group, tg.tg_tag, tg.priority, tg.encrypted,
-               tg.call_count, tg.total_ms, tg.first_seen, tg.last_seen
-        FROM talkgroups tg
-        LEFT JOIN systems s ON tg.system_id = s.id
-        WHERE 1=1
-    """
     params: List[Any] = []
+    if from_ts is None and to_ts is None:
+        query = """
+            SELECT tg.id, tg.system_id, s.name as system_name, tg.tgid, tg.alias,
+                   tg.tg_group, tg.tg_tag, tg.priority, tg.encrypted,
+                   tg.call_count, tg.total_ms, tg.first_seen, tg.last_seen
+            FROM talkgroups tg
+            LEFT JOIN systems s ON tg.system_id = s.id
+            WHERE 1=1
+        """
+        order = "tg.last_seen DESC"
+        id_col = "tg.tgid"
+    else:
+        query = f"""
+            SELECT tg.id, e.system_id, s.name as system_name, e.to_tgid as tgid, tg.alias,
+                   tg.tg_group, tg.tg_tag, tg.priority, MAX(e.encrypted > 0) as encrypted,
+                   COUNT(*) as call_count, COALESCE(SUM(e.duration_ms), 0) as total_ms,
+                   MIN(e.ts) as first_seen, MAX(e.ts) as last_seen
+            FROM events e
+            LEFT JOIN talkgroups tg ON e.system_id = tg.system_id AND e.to_tgid = tg.tgid
+            LEFT JOIN systems s ON e.system_id = s.id
+            WHERE {CALL_EVENT_FILTER}
+        """
+        query = _add_range(query, params, "e.ts", from_ts, to_ts)
+        order = "call_count DESC"
+        id_col = "e.to_tgid"
     if search:
-        query += " AND (tg.alias LIKE ? OR CAST(tg.tgid AS TEXT) LIKE ?)"
+        query += f" AND (tg.alias LIKE ? OR CAST({id_col} AS TEXT) LIKE ?)"
         term = f"%{search}%"
         params.extend([term, term])
-    query += " ORDER BY tg.last_seen DESC LIMIT ?"
+    if from_ts is not None or to_ts is not None:
+        query += " GROUP BY e.system_id, e.to_tgid"
+    query += f" ORDER BY {order} LIMIT ?"
     params.append(limit)
     rows = c.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/radios")
-def get_radios(limit: int = Query(200, ge=1, le=1000), search: Optional[str] = None):
-    """List radios/subscribers with call stats."""
+def get_radios(
+    limit: int = Query(200, ge=1, le=1000),
+    search: Optional[str] = None,
+    from_ts: Optional[float] = FromTs,
+    to_ts: Optional[float] = ToTs,
+):
+    """Radios/subscribers with call stats (lifetime, or computed for a range)."""
     c = db()
-    query = """
-        SELECT r.id, r.system_id, s.name as system_name, r.rid, r.alias,
-               r.call_count, r.total_ms, r.first_seen, r.last_seen
-        FROM radios r
-        LEFT JOIN systems s ON r.system_id = s.id
-        WHERE 1=1
-    """
     params: List[Any] = []
+    if from_ts is None and to_ts is None:
+        query = """
+            SELECT r.id, r.system_id, s.name as system_name, r.rid, r.alias,
+                   r.call_count, r.total_ms, r.first_seen, r.last_seen
+            FROM radios r
+            LEFT JOIN systems s ON r.system_id = s.id
+            WHERE 1=1
+        """
+        order = "r.last_seen DESC"
+        id_col = "r.rid"
+    else:
+        query = f"""
+            SELECT r.id, e.system_id, s.name as system_name, e.from_rid as rid, r.alias,
+                   COUNT(*) as call_count, COALESCE(SUM(e.duration_ms), 0) as total_ms,
+                   MIN(e.ts) as first_seen, MAX(e.ts) as last_seen
+            FROM events e
+            LEFT JOIN radios r ON e.system_id = r.system_id AND e.from_rid = r.rid
+            LEFT JOIN systems s ON e.system_id = s.id
+            WHERE {CALL_EVENT_FILTER} AND e.from_rid IS NOT NULL AND e.from_rid != 0
+        """
+        query = _add_range(query, params, "e.ts", from_ts, to_ts)
+        order = "call_count DESC"
+        id_col = "e.from_rid"
     if search:
-        query += " AND (r.alias LIKE ? OR CAST(r.rid AS TEXT) LIKE ?)"
+        query += f" AND (r.alias LIKE ? OR CAST({id_col} AS TEXT) LIKE ?)"
         term = f"%{search}%"
         params.extend([term, term])
-    query += " ORDER BY r.last_seen DESC LIMIT ?"
+    if from_ts is not None or to_ts is not None:
+        query += " GROUP BY e.system_id, e.from_rid"
+    query += f" ORDER BY {order} LIMIT ?"
     params.append(limit)
     rows = c.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/affiliations")
-def get_affiliations(limit: int = Query(100, ge=1, le=500)):
-    """Active subscriber registrations and affiliations."""
+def get_affiliations(
+    limit: int = Query(100, ge=1, le=1000),
+    from_ts: Optional[float] = FromTs,
+    to_ts: Optional[float] = ToTs,
+):
+    """Subscriber registrations and affiliations, newest first."""
     c = db()
-    rows = c.execute(
-        """SELECT a.id, a.ts, a.system_id, s.name as system_name, a.site_id,
+    params: List[Any] = []
+    query = """SELECT a.id, a.ts, a.system_id, s.name as system_name, a.site_id,
                   COALESCE(st.name, st.site_id) as site_str, a.rid, r.alias as radio_alias,
                   a.tgid, tg.alias as tg_alias
            FROM affiliations a
@@ -256,28 +332,144 @@ def get_affiliations(limit: int = Query(100, ge=1, le=500)):
            LEFT JOIN sites st ON a.site_id = st.id
            LEFT JOIN radios r ON a.system_id = r.system_id AND a.rid = r.rid
            LEFT JOIN talkgroups tg ON a.system_id = tg.system_id AND a.tgid = tg.tgid
-           ORDER BY a.ts DESC LIMIT ?""",
-        (limit,)
-    ).fetchall()
-    return [dict(r) for r in rows]
+           WHERE 1=1"""
+    query = _add_range(query, params, "a.ts", from_ts, to_ts)
+    query += " ORDER BY a.ts DESC LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in c.execute(query, params).fetchall()]
 
 
 @app.get("/api/anomalies")
-def get_anomalies(limit: int = Query(50, ge=1, le=200)):
-    """Novelty and traffic spike alerts."""
+def get_anomalies(
+    limit: int = Query(50, ge=1, le=1000),
+    from_ts: Optional[float] = FromTs,
+    to_ts: Optional[float] = ToTs,
+):
+    """Novelty and traffic spike alerts, newest first."""
     c = db()
-    rows = c.execute(
-        """SELECT an.id, an.ts, an.kind, an.system_id, s.name as system_name,
+    params: List[Any] = []
+    query = """SELECT an.id, an.ts, an.kind, an.system_id, s.name as system_name,
                   an.site_id, an.rid, r.alias as radio_alias, an.tgid,
                   tg.alias as tg_alias, an.details, an.ack
            FROM anomalies an
            LEFT JOIN systems s ON an.system_id = s.id
            LEFT JOIN radios r ON an.system_id = r.system_id AND an.rid = r.rid
            LEFT JOIN talkgroups tg ON an.system_id = tg.system_id AND an.tgid = tg.tgid
-           ORDER BY an.ts DESC LIMIT ?""",
-        (limit,)
-    ).fetchall()
-    return [dict(r) for r in rows]
+           WHERE 1=1"""
+    query = _add_range(query, params, "an.ts", from_ts, to_ts)
+    query += " ORDER BY an.ts DESC LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in c.execute(query, params).fetchall()]
+
+
+@app.get("/api/timeline")
+def get_timeline(
+    from_ts: float = Query(..., alias="from"),
+    to_ts: float = Query(..., alias="to"),
+    buckets: int = Query(96, ge=1, le=1000),
+):
+    """Call and alert counts in evenly sized time buckets across [from, to)."""
+    if to_ts <= from_ts:
+        raise HTTPException(status_code=400, detail="'to' must be after 'from'")
+    bucket_sec = max(60, math.ceil((to_ts - from_ts) / buckets))
+    n = math.ceil((to_ts - from_ts) / bucket_sec)
+    series = [{"t": from_ts + i * bucket_sec, "calls": 0, "airtime_ms": 0, "encrypted": 0, "anomalies": 0}
+              for i in range(n)]
+    c = db()
+    for r in c.execute(
+            f"""SELECT CAST((e.ts - ?) / ? AS INTEGER) as b, COUNT(*) as calls,
+                       COALESCE(SUM(e.duration_ms), 0) as airtime_ms, SUM(e.encrypted > 0) as encrypted
+                FROM events e
+                WHERE e.ts >= ? AND e.ts < ? AND {CALL_EVENT_FILTER}
+                GROUP BY b""",
+            (from_ts, bucket_sec, from_ts, to_ts)):
+        if 0 <= r["b"] < n:
+            series[r["b"]].update(calls=r["calls"], airtime_ms=r["airtime_ms"], encrypted=r["encrypted"] or 0)
+    for r in c.execute(
+            "SELECT CAST((ts - ?) / ? AS INTEGER) as b, COUNT(*) as n FROM anomalies "
+            "WHERE ts >= ? AND ts < ? GROUP BY b",
+            (from_ts, bucket_sec, from_ts, to_ts)):
+        if 0 <= r["b"] < n:
+            series[r["b"]]["anomalies"] = r["n"]
+    return {"from": from_ts, "to": to_ts, "bucket_sec": bucket_sec, "buckets": series}
+
+
+def _top_series(c, table: str, key: str, days: List[str], top: int, alias_sql: str) -> List[Dict[str, Any]]:
+    """Top `top` keys by calls over `days`, each with a per-day calls/airtime series."""
+    first, last = days[0], days[-1]
+    leaders = c.execute(
+        f"""SELECT d.system_id, d.{key} as id, SUM(d.calls) as calls, SUM(d.airtime_ms) as airtime_ms,
+                   ({alias_sql}) as alias
+            FROM {table} d
+            WHERE d.day BETWEEN ? AND ?
+            GROUP BY d.system_id, d.{key}
+            ORDER BY calls DESC LIMIT ?""",
+        (first, last, top)).fetchall()
+    out = []
+    index = {d: i for i, d in enumerate(days)}
+    for row in leaders:
+        calls = [0] * len(days)
+        airtime = [0] * len(days)
+        for r in c.execute(
+                f"SELECT day, calls, airtime_ms FROM {table} WHERE system_id=? AND {key}=? AND day BETWEEN ? AND ?",
+                (row["system_id"], row["id"], first, last)):
+            i = index[r["day"]]
+            calls[i] = r["calls"]
+            airtime[i] = r["airtime_ms"]
+        out.append({
+            "system_id": row["system_id"], key: row["id"], "alias": row["alias"],
+            "calls": row["calls"], "airtime_ms": row["airtime_ms"],
+            "series": {"calls": calls, "airtime_ms": airtime},
+        })
+    return out
+
+
+@app.get("/api/trends")
+def get_trends(days: int = Query(30, ge=2, le=366), top: int = Query(10, ge=1, le=50)):
+    """Daily rollups for the trends dashboard: system totals, top talkgroups and radios.
+
+    Built from the daily_* tables, so it reaches back beyond raw event retention.
+    """
+    if maintenance_instance:
+        maintenance_instance.refresh_today()
+    today = datetime.now().date()
+    day_list = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
+    prev_first = (today - timedelta(days=2 * days - 1)).isoformat()
+    c = db()
+
+    metrics = ("calls", "airtime_ms", "encrypted_calls", "unique_rids", "unique_tgs", "anomalies")
+    totals = {m: [0] * days for m in metrics}
+    index = {d: i for i, d in enumerate(day_list)}
+    for r in c.execute(
+            f"""SELECT day, {', '.join(f'SUM({m}) as {m}' for m in metrics)}
+                FROM daily_system_stats WHERE day BETWEEN ? AND ? GROUP BY day""",
+            (day_list[0], day_list[-1])):
+        for m in metrics:
+            totals[m][index[r["day"]]] = r[m] or 0
+    prev = c.execute(
+        "SELECT COALESCE(SUM(calls), 0) as calls, COALESCE(SUM(airtime_ms), 0) as airtime_ms, "
+        "COALESCE(SUM(anomalies), 0) as anomalies FROM daily_system_stats WHERE day BETWEEN ? AND ?",
+        (prev_first, (today - timedelta(days=days)).isoformat())).fetchone()
+
+    return {
+        "days": day_list,
+        "totals": totals,
+        "previous_period": dict(prev),
+        "top_talkgroups": _top_series(
+            c, "daily_tg_stats", "tgid", day_list, top,
+            "SELECT alias FROM talkgroups t WHERE t.system_id = d.system_id AND t.tgid = d.tgid"),
+        "top_radios": _top_series(
+            c, "daily_rid_stats", "rid", day_list, top,
+            "SELECT alias FROM radios t WHERE t.system_id = d.system_id AND t.rid = d.rid"),
+    }
+
+
+@app.get("/api/storage")
+def get_storage():
+    """Database/audio disk usage, row counts and retention settings."""
+    if not maintenance_instance:
+        raise HTTPException(status_code=503, detail="Maintenance worker not running")
+    return maintenance_instance.storage_stats()
 
 
 @app.get("/api/topology")
@@ -449,6 +641,8 @@ async def websocket_audio_proxy(client_ws: WebSocket):
                 try:
                     while True:
                         msg = await client_ws.receive()
+                        if msg.get("type") == "websocket.disconnect":
+                            return
                         if "bytes" in msg and msg["bytes"]:
                             await op25_ws.send(msg["bytes"])
                         elif "text" in msg and msg["text"]:
@@ -456,7 +650,12 @@ async def websocket_audio_proxy(client_ws: WebSocket):
                 except Exception:
                     pass
 
-            await asyncio.gather(forward_to_client(), forward_to_op25())
+            # When either side goes away, tear down the other instead of leaving
+            # the upstream socket open until its next failed send.
+            tasks = [asyncio.create_task(forward_to_client()), asyncio.create_task(forward_to_op25())]
+            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception as e:

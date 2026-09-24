@@ -94,6 +94,12 @@ export function useLiveTelemetry() {
               }
               return next.sort((a, b) => b.ts - a.ts).slice(0, 150);
             });
+          } else if (msg.event === 'event_update') {
+            // Partial update (e.g. final duration when a call closes); only patch known rows.
+            const update: Partial<EventItem> & { id: number } = msg.data;
+            setEvents((prev) =>
+              prev.map((ev) => (ev.id === update.id ? { ...ev, ...update } : ev))
+            );
           } else if (msg.event === 'transcript') {
             const update = msg.data;
             setEvents((prev) =>
@@ -132,7 +138,13 @@ export function useLiveTelemetry() {
     return () => {
       clearInterval(interval);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) {
+        // Detach handlers first so an intentional close doesn't schedule a reconnect
+        // (otherwise StrictMode/unmount leaks a second live socket).
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+      }
     };
   }, []);
 

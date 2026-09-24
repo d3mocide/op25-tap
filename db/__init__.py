@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -12,6 +13,8 @@ DB_DIR = Path(__file__).parent
 DATA_DIR = Path(os.environ.get("OP25TAP_DATA_DIR", Path(__file__).resolve().parents[1]))
 DB_PATH = DATA_DIR / "db" / "op25tap.db"
 SCHEMA_PATH = DB_DIR / "schema.sql"
+
+logger = logging.getLogger("op25-db")
 
 _LOCAL = threading.local()
 _INIT_LOCK = threading.Lock()
@@ -27,6 +30,38 @@ def _connect():
     return conn
 
 
+def _m1_event_media_columns(conn):
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(events)").fetchall()]
+    if "transcript" not in cols:
+        conn.execute("ALTER TABLE events ADD COLUMN transcript TEXT")
+    if "audio_file" not in cols:
+        conn.execute("ALTER TABLE events ADD COLUMN audio_file TEXT")
+
+
+def _m2_drop_unused_tables(conn):
+    # Carried over from trunk-tap's SDRTrunk ingest; OP25 never populates them.
+    for table in ("calls_fts", "calls", "patches", "denies", "ingest_state"):
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+
+
+def _m3_incremental_vacuum(conn):
+    # Lets the retention job hand freed pages back to the OS. Switching an
+    # existing database requires a full VACUUM once.
+    if conn.execute("PRAGMA auto_vacuum").fetchone()[0] != 2:
+        logger.info("Enabling incremental auto-vacuum (one-time VACUUM; may take a while on large databases)")
+        conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+        conn.execute("VACUUM")
+
+
+# (version, migration) -- append only; each must be idempotent.
+MIGRATIONS = [
+    (1, _m1_event_media_columns),
+    (2, _m2_drop_unused_tables),
+    (3, _m3_incremental_vacuum),
+]
+SCHEMA_VERSION = MIGRATIONS[-1][0]
+
+
 def init_db():
     global _INITIALIZED
     with _INIT_LOCK:
@@ -34,16 +69,21 @@ def init_db():
             return
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = _connect()
-        with open(SCHEMA_PATH) as f:
-            conn.executescript(f.read())
-        # Migration: ensure transcript and audio_file columns exist on events
-        cur = conn.cursor()
-        cols = [r[1] for r in cur.execute("PRAGMA table_info(events)").fetchall()]
-        if "transcript" not in cols:
-            cur.execute("ALTER TABLE events ADD COLUMN transcript TEXT")
-        if "audio_file" not in cols:
-            cur.execute("ALTER TABLE events ADD COLUMN audio_file TEXT")
-        conn.close()
+        try:
+            fresh = conn.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()[0] == 0
+            if fresh:
+                # Must be set before the first table is created to avoid a VACUUM.
+                conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+            with open(SCHEMA_PATH) as f:
+                conn.executescript(f.read())
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            for target, migrate in MIGRATIONS:
+                if version < target:
+                    migrate(conn)
+                    conn.execute(f"PRAGMA user_version={target}")
+                    version = target
+        finally:
+            conn.close()
         _INITIALIZED = True
 
 
@@ -53,6 +93,24 @@ def db():
     if not hasattr(_LOCAL, "conn"):
         _LOCAL.conn = _connect()
     return _LOCAL.conn
+
+
+# Rows of `events` (alias `e`) that count as calls: talkgroup calls, minus the
+# zero-duration call_log rows that duplicate a live-tracked transmission.
+CALL_EVENT_FILTER = """(
+    e.to_tgid IS NOT NULL
+    AND NOT (
+        e.duration_ms = 0
+        AND EXISTS (
+            SELECT 1 FROM events e2
+            WHERE e2.frequency = e.frequency
+              AND e2.to_tgid = e.to_tgid
+              AND e2.ts BETWEEN e.ts - 6.0 AND e.ts + 6.0
+              AND e2.id != e.id
+              AND e2.duration_ms > 0
+        )
+    )
+)"""
 
 
 # ---- upsert helpers ----------------------------------------------------------
@@ -225,6 +283,10 @@ def wipe():
             if p.exists():
                 p.unlink()
         _INITIALIZED = False
+
+
+def set_event_audio_file(event_id: int, audio_file: Optional[str]):
+    db().execute("UPDATE events SET audio_file=? WHERE id=?", (audio_file, event_id))
 
 
 def update_event_transcript(event_id: int, transcript: str, audio_file: Optional[str] = None):

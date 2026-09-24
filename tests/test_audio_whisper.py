@@ -141,6 +141,10 @@ class TestAudioWhisperPipeline(unittest.TestCase):
         self.assertTrue(expected_path.exists())
         self.assertGreater(expected_path.stat().st_size, 10000)
 
+        # Playback availability is recorded even if transcription never succeeds
+        row = c.execute("SELECT audio_file FROM events WHERE id=?", (event_id,)).fetchone()
+        self.assertEqual(row["audio_file"], f"audio_calls/{event_id}.wav")
+
         # Cleanup test wav
         expected_path.unlink(missing_ok=True)
 

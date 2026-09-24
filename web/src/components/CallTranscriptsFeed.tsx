@@ -2,12 +2,14 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Headphones, MessageSquareQuote, Play, Radio, Search, Square, Volume2 } from 'lucide-react';
 import type { EventItem } from '../types';
 import { formatSystemLabel, getSystemColor, getTalkgroupColor } from '../utils/colors';
+import { formatTs } from '../utils/time';
 
 interface CallTranscriptsFeedProps {
   events: EventItem[];
+  historical?: boolean;
 }
 
-export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events }) => {
+export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events, historical = false }) => {
   const [filter, setFilter] = useState('');
   const [playingId, setPlayingId] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -78,10 +80,7 @@ export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events
     );
   });
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
+  const formatTime = (ts: number) => formatTs(ts);
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -90,7 +89,7 @@ export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <MessageSquareQuote size={16} color="var(--accent-cyan)" />
           <h2 style={{ fontSize: '0.84rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0, color: 'var(--text-main)' }}>
-            Voice Intercepts & Live Transcriptions
+            {historical ? 'Voice Intercepts & Transcriptions' : 'Voice Intercepts & Live Transcriptions'}
           </h2>
           <span className="badge badge-cyan mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
             {filtered.length} {filtered.length === 1 ? 'call' : 'calls'}

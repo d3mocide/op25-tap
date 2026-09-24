@@ -1,16 +1,14 @@
 import React from 'react';
 import { ShieldAlert } from 'lucide-react';
 import type { Anomaly } from '../types';
+import { formatTs } from '../utils/time';
 
 interface AnomaliesPanelProps {
   anomalies: Anomaly[];
 }
 
 export const AnomaliesPanel: React.FC<AnomaliesPanelProps> = ({ anomalies }) => {
-  const formatTime = (ts: number) => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
+  const formatTime = (ts: number) => formatTs(ts);
 
   const getKindBadge = (kind: string) => {
     switch (kind) {

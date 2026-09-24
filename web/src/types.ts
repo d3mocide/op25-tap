@@ -150,3 +150,68 @@ export interface Anomaly {
   details: string;
   ack: number;
 }
+
+/** Absolute time range in epoch seconds; `to` is exclusive. */
+export interface TimeRange {
+  from: number;
+  to: number;
+}
+
+export interface TimelineBucket {
+  t: number;
+  calls: number;
+  airtime_ms: number;
+  encrypted: number;
+  anomalies: number;
+}
+
+export interface TimelineResponse {
+  from: number;
+  to: number;
+  bucket_sec: number;
+  buckets: TimelineBucket[];
+}
+
+export interface TrendSeries {
+  calls: number[];
+  airtime_ms: number[];
+}
+
+export interface TrendLeader {
+  system_id: number;
+  tgid?: number;
+  rid?: number;
+  alias: string | null;
+  calls: number;
+  airtime_ms: number;
+  series: TrendSeries;
+}
+
+export interface TrendsResponse {
+  days: string[];
+  totals: {
+    calls: number[];
+    airtime_ms: number[];
+    encrypted_calls: number[];
+    unique_rids: number[];
+    unique_tgs: number[];
+    anomalies: number[];
+  };
+  previous_period: { calls: number; airtime_ms: number; anomalies: number };
+  top_talkgroups: TrendLeader[];
+  top_radios: TrendLeader[];
+}
+
+export interface StorageStats {
+  db_bytes: number;
+  db_free_bytes: number;
+  audio_files: number;
+  audio_bytes: number;
+  row_counts: Record<string, number>;
+  oldest_event_ts: number | null;
+  newest_event_ts: number | null;
+  first_rollup_day: string | null;
+  retention_days: number;
+  audio_retention_hours: number;
+  history_start_ts: number | null;
+}

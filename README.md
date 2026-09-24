@@ -25,6 +25,10 @@ Built with a **Python FastAPI** backend (REST + WebSockets) and a modern **Vite 
 - **Real-Time Call Stream**: WebSocket-driven call feed showing Talkgroups, Source Radio IDs (RIDs), frequencies, duration, and encryption status (`CLEAR` / `ENC`).
 - **Subscriber Registrations & Affiliations**: Live tracking of subscriber Wireless User IDs (RIDs) and their affiliated talkgroups from OP25's `wuid_data`.
 - **Talkgroups Directory**: Complete inventory of talkgroups with call statistics and total airtime.
+- **History Mode & Date-Range Picker**: Switch from Live to History to replay any past period: presets (last hour, 24h, today, yesterday, 7/30 days), a custom range, and step back/forward buttons. Every panel (calls, transcripts and audio, subscribers, talkgroups, alerts) is scoped to the range, and the URL (`?from=…&to=…`) can be bookmarked or shared.
+- **Activity Timeline**: Calls-per-interval bar chart for the selected range with alert markers. Drag to zoom, click a bar to drill in, browser Back to zoom out.
+- **Trends Dashboard**: 7/30/90-day KPIs with sparklines and period-over-period change, a clickable calls-per-day chart, and top talkgroups/radios with daily sparklines. Built from daily rollups that are kept after raw history expires.
+- **Retention Policy**: Raw history and call audio are purged on a schedule so the database doesn't grow without bound; disk usage is shown in the footer.
 - **Network Topology**: Discovered adjacent neighbor towers and uplink frequencies from control channel broadcast messages.
 - **Embedded Audio Stream**: Integrated Icecast audio player with live streaming and volume control.
 - **Remote Whisper Speech-to-Text**: Automatic background capture of OP25 port 9000 raw PCM audio, retention window buffering, remote Whisper transcription, and inline speech bubbles with historical audio playback in the Call History feed.
@@ -48,7 +52,7 @@ Visit **`http://localhost:8000/`** in your browser.
 # Start dev instance with live UI hot-reload and backend auto-reload
 docker compose -f docker-compose.dev.yml up --build -d
 ```
-Visit **`http://localhost:5173/`** in your browser. Any edits in `web/src/` or backend Python files update live instantly without rebuilding the container!
+Visit **`http://localhost:5173/`** in your browser (or the `FRONTEND_PORT` you set). Any edits in `web/src/` or backend Python files update live instantly without rebuilding the container!
 
 
 ### Running Locally
@@ -61,7 +65,8 @@ uv venv
 uv pip install -r requirements.txt
 
 # Start backend server (serves API and compiled frontend at http://localhost:8000)
-.venv\Scripts\uvicorn.exe api.main:app --host 0.0.0.0 --port 8000
+# (Windows: .venv\Scripts\uvicorn.exe ...)
+.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 #### 2. Development Mode with Frontend Hot-Reload
@@ -95,22 +100,41 @@ cp .env.example .env
 | `OP25_HOLD_SECONDS`  | `3.0`                 | Hang time before an inactive call is considered closed      |
 | `OP25_SYSTEM_NAME`   | `County P25`          | Default human-readable label if OP25 reports no system name |
 | `HOST`               | `0.0.0.0`             | API server host binding                                     |
-| `PORT`               | `8000`                | API server port binding                                     |
+| `PORT`               | `8000`                | Port for the API + web UI (production serves both on this one port) |
+| `FRONTEND_PORT`      | `5173`                | Dev only: Vite hot-reload UI port (`docker-compose.dev.yml`, `npm run dev`) |
 | `OP25TAP_DATA_DIR`   | `./data`              | Directory for persistent SQLite databases and cache         |
 | `WHISPER_URL`        | _(disabled)_          | Remote OpenAI-compatible Whisper transcription URL          |
 | `WHISPER_MODEL`      | `base.en`             | Whisper model name passed to remote API                     |
 | `WHISPER_API_KEY`    | _(optional)_          | Bearer token or authorization key for Whisper service       |
 | `WHISPER_LANGUAGE`   | `en`                  | Spoken language hint for transcription                      |
-| `WHISPER_RETENTION_HOURS` | `24`             | Hours to keep recorded call audio on disk for UI playback   |
+| `RETENTION_DAYS`     | `30`                  | Days of raw history (calls, affiliations, roaming, alerts) to keep; `0` keeps everything |
+| `AUDIO_RETENTION_HOURS` | `168`              | Hours to keep recorded call audio for playback; `0` disables saving audio (was `WHISPER_RETENTION_HOURS`, still honored) |
+| `MAINTENANCE_INTERVAL_MINUTES` | `15`        | How often rollups, purging and audio cleanup run            |
+| `TZ`                 | _(system)_            | Time zone that defines "a day" for daily trends (e.g. `America/Chicago`; set it in Docker, which defaults to UTC) |
 
 ### 2. Optional Advanced Configuration: `config/`
 
 If you require advanced capabilities such as polling multiple OP25 instances simultaneously, granular hex NAC lookup tables, or custom regex naming rules, you can optionally supply JSON files in the `config/` folder:
 
-- **`config/op25.json`**: Multi-endpoint arrays (`endpoints: [...]`) and NAC/SYSID mapping tables (`systems: { "0x3cc": "County P25" }`). See [config/op25.example.json](file:///d:/Projects/op25-tap/config/op25.example.json).
-- **`config/systems.json`**: Regex/prefix system name canonicalization rules and RadioReference System ID deep-links (`rr_sids`). See [config/systems.example.json](file:///d:/Projects/op25-tap/config/systems.example.json).
+- **`config/op25.json`**: Multi-endpoint arrays (`endpoints: [...]`) and NAC/SYSID mapping tables (`systems: { "0x3cc": "County P25" }`). See [config/op25.example.json](config/op25.example.json).
+- **`config/systems.json`**: Regex/prefix system name canonicalization rules and RadioReference System ID deep-links (`rr_sids`). See [config/systems.example.json](config/systems.example.json).
 
-_For in-depth schema documentation on JSON configuration, see [config/README.md](file:///d:/Projects/op25-tap/config/README.md)._
+_For in-depth schema documentation on JSON configuration, see [config/README.md](config/README.md)._
+
+### 3. Data Retention & History
+
+A background maintenance job (every `MAINTENANCE_INTERVAL_MINUTES`) keeps storage bounded:
+
+| Data | Kept for | Notes |
+| :--- | :------- | :---- |
+| Calls, affiliations, roaming, alerts | `RETENTION_DAYS` (30) | Cut at local midnight, so a day is either fully kept or fully purged |
+| Call audio (WAV) | `AUDIO_RETENTION_HOURS` (168) | About 1 MB per minute of audio, which is usually the biggest consumer of disk space |
+| Daily rollups (per system, talkgroup, radio) | Forever | Very small; powers the Trends dashboard beyond the raw retention window |
+| Talkgroup / radio / site directories | Forever | Names, first/last seen, lifetime counters |
+
+Every day is rolled up before it's purged. Freed space is returned to the OS (SQLite incremental vacuum). `GET /api/storage` reports DB and audio size, row counts and the oldest retained record.
+
+Schema changes are applied automatically on startup through numbered migrations (`PRAGMA user_version`). The first start after upgrading drops the unused trunk-tap tables and runs a one-time `VACUUM`, which can take a moment on a large database.
 
 ---
 
@@ -126,15 +150,16 @@ op25-tap/
 ├── db/                   # SQLite schema & database helpers
 │   ├── __init__.py
 │   └── schema.sql
-├── ingest/               # OP25 status poller, diff engine, and anomaly detection
+├── ingest/               # OP25 status poller, diff engine, anomaly detection, retention
 │   ├── op25_trunk.py
-│   └── anomalies.py
+│   ├── anomalies.py
+│   └── maintenance.py    # daily rollups, retention purge, audio cleanup
 ├── samples/              # Captured raw OP25 status dumps
 ├── tests/                # Automated ingest tests
 ├── web/                  # Vite + React / TypeScript tactical frontend
 │   ├── src/
 │   │   ├── components/   # Header, VoiceGrid, LiveEventFeed, SubscribersTable, etc.
-│   │   ├── hooks/        # useLiveTelemetry WebSocket & REST hook
+│   │   ├── hooks/        # useLiveTelemetry (WebSocket), useTimeRange (URL), useHistoryData
 │   │   └── types.ts
 │   └── dist/             # Compiled production bundle
 ├── Dockerfile            # Multi-stage Docker build

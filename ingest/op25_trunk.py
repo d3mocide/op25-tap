@@ -13,6 +13,7 @@ import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
@@ -144,7 +145,9 @@ class Op25Poller:
             "plots": {},
             "fine_tune": None,
         }
-        self._processed_call_keys = set()     # Memory deduplicator for call_log entries
+        self._processed_call_keys: "OrderedDict[tuple, None]" = OrderedDict()  # call_log dedup (bounded LRU)
+        self._last_roam: Dict[tuple, int] = {}  # (sys_id, rid) -> last site_id written to roaming
+        self._stop = threading.Event()
 
     # ---- Fetch ---------------------------------------------------------------
     def fetch(self) -> List[dict]:
@@ -152,6 +155,7 @@ class Op25Poller:
             r = requests.post(self.url, json=STATUS_CMD, timeout=5)
         except requests.RequestException:
             r = requests.get(self.url, timeout=5)
+        r.raise_for_status()
         data = r.json()
         return data if isinstance(data, list) else [data]
 
@@ -286,8 +290,7 @@ class Op25Poller:
                         if s_rid and s_tgid:
                             record_affiliation(sys_id, site_id, s_rid, s_tgid, s_time)
                         if s_rid and site_id:
-                            c.execute("INSERT OR IGNORE INTO roaming(ts, system_id, site_id, rid) VALUES (?,?,?,?)",
-                                      (s_time, sys_id, site_id, s_rid))
+                            self._record_roaming(sys_id, site_id, s_rid, s_time)
 
                     # Adjacent Data: Neighbor Sites
                     adj_data = sysd.get("adjacent_data") or {}
@@ -401,19 +404,20 @@ class Op25Poller:
                     dedup_key = (int(log_time), log_freq, log_tgid)
                     if dedup_key in self._processed_call_keys:
                         continue
-                    self._processed_call_keys.add(dedup_key)
-                    if len(self._processed_call_keys) > 2000:
-                        self._processed_call_keys.clear()
+                    self._processed_call_keys[dedup_key] = None
+                    while len(self._processed_call_keys) > 2000:
+                        self._processed_call_keys.popitem(last=False)
 
                     sysname = self._system_name(None, None, log_sysid)
                     info = self.sys_info.get(sysname, {})
                     sys_id = info.get("sys_id") or upsert_system(sysname, protocol=PROTOCOL, label=sysname, now=now)
                     site_id = info.get("site_id")
 
-                    if log_tgid:
-                        upsert_talkgroup(sys_id, log_tgid, alias=log_tgtag, now=log_time, add_call=1)
+                    # Refresh aliases only; call counts are added once, either when a
+                    # live-tracked call closes or when a new event row is inserted below.
+                    upsert_talkgroup(sys_id, log_tgid, alias=log_tgtag, now=log_time)
                     if log_rid:
-                        upsert_radio(sys_id, log_rid, alias=log_rtag, now=log_time, add_call=1)
+                        upsert_radio(sys_id, log_rid, alias=log_rtag, now=log_time)
 
                     # 1. Check if this transmission is currently active and being tracked/recorded live
                     is_active = False
@@ -450,6 +454,10 @@ class Op25Poller:
                         (log_time, sys_id, site_id, PROTOCOL, "Group Call", log_rid,
                          log_tgid, log_freq, 0, ev_id, 0, f"priority: {prio}" if prio else "")
                     )
+                    if cur.rowcount > 0:
+                        upsert_talkgroup(sys_id, log_tgid, now=log_time, add_call=1)
+                        if log_rid:
+                            upsert_radio(sys_id, log_rid, now=log_time, add_call=1)
                     # Only emit live WebSocket events if this call just happened (< 5s old)
                     if cur.rowcount > 0 and (now - log_time) < 5.0:
                         self._emit("event", {
@@ -467,8 +475,8 @@ class Op25Poller:
                             "details": f"priority: {prio}" if prio else "",
                         })
                         try:
-                            detect_novelty(sys_id, site_id, log_rid or None, log_tgid, log_time, None)
-                            spike_check(sys_id, log_rid or None, log_time, None)
+                            detect_novelty(sys_id, site_id, log_rid or None, log_tgid, log_time, self._emit)
+                            spike_check(sys_id, log_rid or None, log_time, self._emit)
                         except Exception as e:
                             logger.error(f"Anomaly check failed: {e}")
 
@@ -510,12 +518,27 @@ class Op25Poller:
         self.latest_status["connected"] = True
         self.latest_status["last_poll"] = now
 
+        # One transaction per poll: wuid_data alone can mean hundreds of upserts,
+        # which would otherwise each be committed individually.
+        # IMMEDIATE takes the write lock up front so a concurrent writer (maintenance
+        # purge, Whisper) makes us wait on busy_timeout instead of failing the poll.
+        c = db()
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            self._process_in_txn(items, now)
+            c.execute("COMMIT")
+        except Exception:
+            c.execute("ROLLBACK")
+            self._last_roam.clear()  # may reference rows that were just rolled back
+            raise
+        # Broadcast telemetry update to connected clients
+        self._emit("telemetry", self.latest_status)
+
+    def _process_in_txn(self, items: List[dict], now: float):
         observations = self._extract_observations_and_metadata(items, now)
-        seen_keys = set()
 
         for ob in observations:
             key = (ob["system"], ob["freq"])
-            seen_keys.add(key)
             st = self.active.get(key)
 
             # Sighting on existing call?
@@ -533,8 +556,6 @@ class Op25Poller:
             self._open(key, ob, now)
 
         self.sweep(now)
-        # Broadcast telemetry update to connected clients
-        self._emit("telemetry", self.latest_status)
 
     def sweep(self, now: Optional[float] = None):
         now = now or time.time()
@@ -580,8 +601,7 @@ class Op25Poller:
                 return
 
             if site_id is not None and ob["srcaddr"]:
-                c.execute("INSERT OR IGNORE INTO roaming(ts, system_id, site_id, rid) VALUES (?,?,?,?)",
-                          (now, sys_id, site_id, ob["srcaddr"]))
+                self._record_roaming(sys_id, site_id, ob["srcaddr"], now)
 
             row_id = cur.lastrowid
             self._emit("event", {
@@ -612,8 +632,8 @@ class Op25Poller:
         }
 
         try:
-            detect_novelty(sys_id, site_id, ob["srcaddr"] or None, ob["tgid"], now, None)
-            spike_check(sys_id, ob["srcaddr"] or None, now, None)
+            detect_novelty(sys_id, site_id, ob["srcaddr"] or None, ob["tgid"], now, self._emit)
+            spike_check(sys_id, ob["srcaddr"] or None, now, self._emit)
         except Exception as e:
             logger.error(f"[anomaly] error: {e}")
 
@@ -622,6 +642,15 @@ class Op25Poller:
                 self.audio_recorder.start_call(row_id)
             except Exception as e:
                 logger.debug(f"Audio recorder start_call error: {e}")
+
+    def _record_roaming(self, sys_id, site_id, rid, ts):
+        """Write a roaming row only when a RID is first seen or changes site."""
+        key = (sys_id, rid)
+        if self._last_roam.get(key) == site_id:
+            return
+        self._last_roam[key] = site_id
+        db().execute("INSERT INTO roaming(ts, system_id, site_id, rid) VALUES (?,?,?,?)",
+                     (ts, sys_id, site_id, rid))
 
     def _learn_source(self, st, ob, now):
         st["srcaddr"] = ob["srcaddr"]
@@ -641,6 +670,13 @@ class Op25Poller:
             upsert_radio(st["sys_id"], st["srcaddr"], now=now, add_call=1, add_ms=dur)
         upsert_talkgroup(st["sys_id"], st["tgid"], now=now, add_call=1, add_ms=dur,
                          encrypted=st["encrypted"])
+        # Let live clients patch the zero-duration row they got on open.
+        self._emit("event_update", {
+            "id": st["row"],
+            "duration_ms": dur,
+            "encrypted": st["encrypted"],
+            "from": st["srcaddr"] or None,
+        })
 
         if self.audio_recorder:
             try:
@@ -658,7 +694,7 @@ class Op25Poller:
     # ---- Continuous loop -----------------------------------------------------
     def run_forever(self, interval: float = 1.0):
         logger.info(f"Starting OP25 poller against {self.url} (interval={interval}s)")
-        while True:
+        while not self._stop.is_set():
             try:
                 data = self.fetch()
                 self.process(data)
@@ -666,7 +702,10 @@ class Op25Poller:
                 logger.warning(f"OP25 poll error: {e}")
                 self.latest_status["connected"] = False
                 self.sweep()
-            time.sleep(interval)
+            self._stop.wait(interval)
+
+    def stop(self):
+        self._stop.set()
 
 
 def start_poll_thread(url: str, callback: Optional[Callable[[str, Any], None]] = None, interval: float = 1.0) -> Op25Poller:

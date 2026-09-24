@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Radio, Search, Users } from 'lucide-react';
 import type { Affiliation } from '../types';
 import { getTalkgroupColor } from '../utils/colors';
+import { formatTs } from '../utils/time';
 
 interface SubscribersTableProps {
   affiliations: Affiliation[];
@@ -69,10 +70,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
     );
   });
 
-  const formatTime = (ts: number) => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
+  const formatTime = (ts: number) => formatTs(ts);
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

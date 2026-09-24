@@ -13,7 +13,8 @@ import wave
 from dotenv import load_dotenv
 import websockets
 
-from db import DATA_DIR
+from db import DATA_DIR, set_event_audio_file
+from ingest.maintenance import audio_retention_hours
 from ingest.whisper_client import WhisperDispatcher
 
 load_dotenv()
@@ -60,10 +61,8 @@ class AudioRecorder:
             self.audio_ws_url = f"ws://{host}:9000"
 
         self.whisper_dispatcher = whisper_dispatcher
-        try:
-            self.retention_hours = float(os.environ.get("WHISPER_RETENTION_HOURS", retention_hours or 24.0))
-        except ValueError:
-            self.retention_hours = 24.0
+        # 0 disables saving WAVs; pruning old ones is done by the maintenance worker.
+        self.retention_hours = retention_hours if retention_hours is not None else audio_retention_hours()
 
         self.audio_dir = DATA_DIR / "audio_calls"
         self.audio_dir.mkdir(parents=True, exist_ok=True)
@@ -142,31 +141,15 @@ class AudioRecorder:
             try:
                 audio_path.write_bytes(wav_bytes)
                 saved_rel_path = f"audio_calls/{audio_filename}"
+                # Record playback availability now, independent of whether
+                # transcription is configured or later succeeds.
+                set_event_audio_file(event_id, saved_rel_path)
             except Exception as e:
-                logger.warning(f"Could not write call audio file {audio_path}: {e}")
+                logger.warning(f"Could not save call audio {audio_path}: {e}")
 
         # Enqueue for Whisper transcription
         if self.whisper_dispatcher:
             self.whisper_dispatcher.enqueue_call(event_id, wav_bytes, audio_file=saved_rel_path)
-
-        # Trigger background prune of old files
-        self._prune_old_audio()
-
-    def _prune_old_audio(self):
-        """Prune WAV files exceeding retention_hours."""
-        if self.retention_hours <= 0:
-            return
-        now = time.time()
-        max_age_sec = self.retention_hours * 3600
-        try:
-            for p in self.audio_dir.glob("*.wav"):
-                try:
-                    if now - p.stat().st_mtime > max_age_sec:
-                        p.unlink(missing_ok=True)
-                except OSError:
-                    pass
-        except Exception as e:
-            logger.debug(f"Audio pruning error: {e}")
 
     def _handle_pcm_frame(self, data: bytes):
         now = time.time()

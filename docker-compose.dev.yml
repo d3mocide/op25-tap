@@ -25,9 +25,12 @@ services:
     container_name: op25-tap-frontend-dev
     restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-5173}:5173"
     environment:
+      # Container-internal addresses; host ports come from PORT / FRONTEND_PORT above.
       - VITE_BACKEND_HOST=backend
+      - VITE_BACKEND_PORT=8000
+      - FRONTEND_PORT=5173
     volumes:
       - ./web:/app/web
       - /app/web/node_modules
