@@ -78,6 +78,7 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
 
       {range && (
         <>
+          <div className="range-presets">
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -88,8 +89,9 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
               {p.label}
             </button>
           ))}
+          </div>
 
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+          <div className="range-step" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
             <button className="btn" style={{ padding: '4px 6px' }} onClick={() => shift(-1)} disabled={!canBack} title="Previous period" aria-label="Previous period">
               <ChevronLeft size={14} />
             </button>
@@ -118,7 +120,7 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
               max={maxInput}
               onChange={(e) => setCustom({ from: e.target.value, to: customTo })}
             />
-            <span style={{ color: 'var(--text-dim)', fontSize: '0.74rem' }}>to</span>
+            <span className="range-to" style={{ color: 'var(--text-dim)', fontSize: '0.74rem' }}>to</span>
             <input
               type="datetime-local"
               className="input-dt"

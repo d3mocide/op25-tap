@@ -96,7 +96,7 @@ export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events
           </span>
         </div>
 
-        <div style={{ position: 'relative', minWidth: '220px', marginLeft: 'auto' }}>
+        <div className="panel-search" style={{ position: 'relative', minWidth: '220px', marginLeft: 'auto' }}>
           <Search size={13} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
           <input
             type="text"
@@ -110,7 +110,7 @@ export const CallTranscriptsFeed: React.FC<CallTranscriptsFeedProps> = ({ events
       </div>
 
       {/* Feed List Container */}
-      <div style={{ padding: '12px', maxHeight: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="panel-scroll" style={{ padding: '12px', maxHeight: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
             <Headphones size={24} style={{ display: 'block', margin: '0 auto 8px', color: 'var(--text-dim)', opacity: 0.5 }} />

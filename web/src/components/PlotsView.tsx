@@ -222,7 +222,7 @@ export const PlotsView: React.FC<PlotsViewProps> = ({ telemetry }) => {
       {/* 2x3 Grid of Scopes */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
         gap: '14px',
         marginBottom: '16px'
       }}>

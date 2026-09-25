@@ -19,12 +19,12 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
   const volPercent = isMuted ? 0 : Math.round(volume * 100);
 
   return (
-    <header className="glass-panel" style={{ padding: '10px 18px', marginBottom: '14px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-        
+    <header className="glass-panel app-header">
+      <div className="hdr-row">
+
         {/* Brand & Connection State */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px', flexShrink: 0 }}>
-          <div style={{
+        <div className="hdr-brand">
+          <div className="hdr-logo" style={{
             width: '36px',
             height: '36px',
             borderRadius: '4px',
@@ -37,18 +37,20 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
           }}>
             <Radio size={19} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h1 style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.01em', margin: 0 }}>
                 OP25<span style={{ color: 'var(--accent-cyan)' }}>-TAP</span>
               </h1>
               <span className={`badge ${telemetry.connected && wsConnected ? 'badge-emerald' : 'badge-rose'}`}>
                 <span className={`pulse-dot ${telemetry.connected && wsConnected ? '' : 'inactive'}`} />
-                {telemetry.connected && wsConnected ? 'RECEIVER LIVE' : 'OFFLINE'}
+                <span className="hdr-status-text">{telemetry.connected && wsConnected ? 'RECEIVER LIVE' : 'OFFLINE'}</span>
               </span>
             </div>
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-              {sys?.system_name || 'Connecting to receiver...'} {sys?.callsign && (
+            <div className="hdr-subtitle">
+              {sys?.system_name || 'Connecting to receiver...'}
+              {telemetry.site && <span className="hdr-subtitle-site"> · <span style={{ color: 'var(--accent-cyan)' }}>Site {telemetry.site}</span></span>}
+              {' '}{sys?.callsign && (
                 <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>// {sys.callsign}</span>
               )}
             </div>
@@ -56,9 +58,9 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
         </div>
 
         {/* Telemetry Metrics Bar (Fixed stable widths to prevent horizontal shifting) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flex: 1, justifyContent: 'center' }}>
-          
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px', minWidth: '135px' }}>
+        <div className="hdr-metrics">
+
+          <div className="hdr-metric hdr-metric-system" style={{ minWidth: '135px' }}>
             <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 700 }}>
               System / Site
             </div>
@@ -67,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
             </div>
           </div>
 
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px', minWidth: '110px' }}>
+          <div className="hdr-metric" style={{ minWidth: '110px' }}>
             <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 700 }}>
               WACN / SYSID
             </div>
@@ -76,7 +78,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
             </div>
           </div>
 
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px', minWidth: '150px' }}>
+          <div className="hdr-metric" style={{ minWidth: '150px' }}>
             <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 700 }}>
               Control Frequency
             </div>
@@ -85,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
             </div>
           </div>
 
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px', minWidth: '85px' }}>
+          <div className="hdr-metric" style={{ minWidth: '85px' }}>
             <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 700 }}>
               Tuning Error
             </div>
@@ -94,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
             </div>
           </div>
 
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px', minWidth: '95px' }}>
+          <div className="hdr-metric" style={{ minWidth: '95px' }}>
             <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 700 }}>
               Subscribers
             </div>
@@ -106,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
         </div>
 
         {/* Tactical Audio Station */}
-        <div className={`audio-station ${isPlaying ? 'active' : ''}`} style={{ width: '260px', minWidth: '260px', boxSizing: 'border-box' }}>
+        <div className={`audio-station hdr-audio ${isPlaying ? 'active' : ''}`}>
           
           {/* Button lights up when active */}
           <button
@@ -125,11 +127,11 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
             title="OP25 Port 9000 Zero-Latency PCM WebSocket Audio"
           >
             <Headphones size={14} color={isPlaying ? 'var(--accent-cyan)' : 'var(--text-muted)'} />
-            <span style={{ fontWeight: 700 }}>AUDIO</span>
+            <span className="hdr-audio-label" style={{ fontWeight: 700 }}>AUDIO</span>
           </button>
 
           {/* Divider */}
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-subtle)', flexShrink: 0 }} />
+          <div className="hdr-audio-divider" style={{ width: '1px', height: '20px', background: 'var(--border-subtle)', flexShrink: 0 }} />
 
           {/* Volume Mute Toggle */}
           <button
@@ -148,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
           </button>
 
           {/* Tactile Volume Slider & Coupled Readout */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <div className="hdr-volume" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <input
               type="range"
               min="0"

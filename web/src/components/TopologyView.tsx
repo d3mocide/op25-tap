@@ -21,7 +21,7 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ telemetry }) => {
         <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{adjList.length}</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '16px', marginBottom: '20px' }}>
         {/* Current Site Card */}
         <div style={{
           background: 'rgba(34, 211, 238, 0.08)',
@@ -91,13 +91,14 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ telemetry }) => {
           No neighbor towers broadcast yet.
         </div>
       ) : (
+        <div className="table-scroll">
         <table className="tactical-table">
           <thead>
             <tr>
               <th>Neighbor Tower</th>
               <th>Downlink Frequency</th>
-              <th>Uplink Frequency</th>
-              <th>Status</th>
+              <th className="hide-sm">Uplink Frequency</th>
+              <th className="hide-sm">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -120,11 +121,11 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ telemetry }) => {
                     {freqMhz} MHz
                   </td>
 
-                  <td className="mono" style={{ color: 'var(--text-dim)' }}>
+                  <td className="mono hide-sm" style={{ color: 'var(--text-dim)' }}>
                     {uplinkMhz} MHz
                   </td>
 
-                  <td>
+                  <td className="hide-sm">
                     <span className="badge badge-cyan">BROADCASTING</span>
                   </td>
                 </tr>
@@ -132,6 +133,7 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ telemetry }) => {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
