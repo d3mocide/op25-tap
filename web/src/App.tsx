@@ -24,6 +24,7 @@ import { TrendsDashboard } from './components/TrendsDashboard';
 import { VoiceGrid } from './components/VoiceGrid';
 import { useHistoryData } from './hooks/useHistoryData';
 import { useLiveTelemetry } from './hooks/useLiveTelemetry';
+import { useIsMobile } from './hooks/useIsMobile';
 import { useTimeRange } from './hooks/useTimeRange';
 import type { StorageStats } from './types';
 import { formatBytes, formatTs } from './utils/time';
@@ -39,6 +40,7 @@ export function App() {
   const { range, setRange } = useTimeRange();
   const history = useHistoryData(range);
   const isHistory = range !== null;
+  const isMobile = useIsMobile();
 
   // Panels read from whichever source the mode selects.
   const events = isHistory ? history.events : live.events;
@@ -70,12 +72,21 @@ export function App() {
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
+  const selectTab = (id: ActiveTab) => {
+    setActiveTab(id);
+    // On phones the tab strip is sticky; bring the new view's top into sight.
+    if (isMobile) window.scrollTo({ top: 0 });
+  };
+
   const tabButton = (id: ActiveTab, icon: React.ReactNode, label: string, badge?: React.ReactNode) => {
     const disabled = isHistory && LIVE_ONLY.includes(id);
     return (
       <button
-        onClick={() => setActiveTab(id)}
-        className={`btn ${tab === id ? 'btn-active' : ''}`}
+        onClick={(e) => {
+          selectTab(id);
+          e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }}
+        className={`btn tab-btn ${tab === id ? 'btn-active' : ''}`}
         disabled={disabled}
         title={disabled ? 'Live only: switch to Live to view' : undefined}
         style={disabled ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
@@ -88,28 +99,20 @@ export function App() {
   };
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '16px 20px', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="app-shell">
       {/* Top Telemetry Header */}
       <Header telemetry={telemetry} wsConnected={wsConnected} />
 
       {/* Live / History + range: scopes every panel below */}
       <TimeRangeBar range={range} onChange={setRange} historyStart={storage?.history_start_ts ?? null} />
 
-      {/* Navigation Bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '16px',
-        borderBottom: '1px solid var(--border-subtle)',
-        paddingBottom: '10px',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {tabButton('monitor', isHistory ? <Clock size={15} /> : <Activity size={15} />, isHistory ? 'Call History' : 'Live Monitor')}
+      {/* Navigation Bar (sticky, horizontally scrollable strip on phones) */}
+      <nav className="app-nav">
+        <div className="app-tabs">
+          {tabButton('monitor', isHistory ? <Clock size={15} /> : <Activity size={15} />,
+            isHistory ? (isMobile ? 'History' : 'Call History') : (isMobile ? 'Monitor' : 'Live Monitor'))}
           {tabButton('trends', <TrendingUp size={15} />, 'Trends')}
-          {tabButton('plots', <BarChart2 size={15} />, 'RF Scopes',
+          {tabButton('plots', <BarChart2 size={15} />, isMobile ? 'Scopes' : 'RF Scopes',
             <span className="tab-badge">{telemetry.plot_files?.length || 0}</span>)}
           {tabButton('subscribers', <Users size={15} />, 'Subscribers',
             <span className="tab-badge">{affiliations.length}</span>)}
@@ -122,18 +125,17 @@ export function App() {
         </div>
 
         {!isHistory && (
-          <div>
-            <button
-              onClick={handleManualRefresh}
-              className="btn"
-              title="Refresh database records"
-            >
-              <RefreshCw size={14} className={isRefreshing ? 'pulse-dot' : ''} />
-              <span>Refresh</span>
-            </button>
-          </div>
+          <button
+            onClick={handleManualRefresh}
+            className="btn app-refresh"
+            title="Refresh database records"
+            aria-label="Refresh"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'pulse-dot' : ''} />
+            {!isMobile && <span>Refresh</span>}
+          </button>
         )}
-      </div>
+      </nav>
 
       {/* Main Tab Views */}
       <main
@@ -144,12 +146,12 @@ export function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {isHistory ? (
               <div className="glass-panel" style={{ padding: '12px 16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 36 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: isMobile ? 28 : 36 }}>
                   <span className="stat-label">
                     Activity · <span className="mono" style={{ color: 'var(--text-main)' }}>{timelineCalls.toLocaleString()}</span> calls
                   </span>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                    Drag to zoom · click a bar to drill in · browser Back to zoom out · <span style={{ color: 'var(--accent-amber)' }}>▬</span> alerts
+                    {isMobile ? 'Drag to zoom · tap a bar to drill in' : 'Drag to zoom · click a bar to drill in · browser Back to zoom out'} · <span style={{ color: 'var(--accent-amber)' }}>▬</span> alerts
                   </span>
                 </div>
                 {history.timeline && (
@@ -168,7 +170,7 @@ export function App() {
 
             {/* Split View: Event Feed & Subscribers */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(480px, 100%), 1fr))', gap: '16px' }}>
-              <div style={{ minHeight: '420px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="split-pane" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <LiveEventFeed events={events} historical={isHistory} />
                 {isHistory && history.hasMore && (
                   <button className="btn" onClick={history.loadMore} disabled={history.loading}>
@@ -176,7 +178,7 @@ export function App() {
                   </button>
                 )}
               </div>
-              <div style={{ minHeight: '420px' }}>
+              <div className="split-pane">
                 <SubscribersTable affiliations={affiliations} />
               </div>
             </div>
@@ -192,7 +194,7 @@ export function App() {
           <TrendsDashboard
             onOpenRange={(r) => {
               setRange(r);
-              setActiveTab('monitor');
+              selectTab('monitor');
             }}
           />
         )}
@@ -229,27 +231,16 @@ export function App() {
       </main>
 
       {/* Footer Status Bar */}
-      <footer style={{
-        marginTop: '20px',
-        paddingTop: '12px',
-        borderTop: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        fontSize: '0.74rem',
-        color: 'var(--text-dim)',
-        flexWrap: 'wrap',
-        gap: '8px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <footer className="app-footer">
+        <div className="app-footer-group">
           <span>Protocol: <strong style={{ color: 'var(--text-muted)' }}>APCO-25 Phase 1 / 2</strong></span>
           <span>Target: <strong className="mono" style={{ color: 'var(--text-muted)' }}>{telemetry.target_url ? telemetry.target_url.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Connected'}</strong></span>
-          <span style={{ color: 'var(--border-subtle)' }}>|</span>
+          <span className="footer-sep">|</span>
           <span>Inspired by <a href="https://github.com/colonelpanichacks/trunk-tap" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>trunk-tap</a></span>
-          <span style={{ color: 'var(--border-subtle)' }}>|</span>
+          <span className="footer-sep">|</span>
           <span>Engine: <a href="https://github.com/boatbod/op25" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>boatbod/op25</a></span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div className="app-footer-group">
           {storage && (
             <span
               title={`Raw history is kept ${storage.retention_days > 0 ? `${storage.retention_days} days` : 'forever'}; call audio ${storage.audio_retention_hours} hours; daily trends indefinitely.`}

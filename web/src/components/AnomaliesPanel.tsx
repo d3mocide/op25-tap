@@ -47,7 +47,7 @@ export const AnomaliesPanel: React.FC<AnomaliesPanelProps> = ({ anomalies }) => 
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto', maxHeight: '550px', padding: '12px' }}>
+      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '550px', padding: '12px' }}>
         {anomalies.length === 0 ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
             No anomaly events detected. System operating normally.

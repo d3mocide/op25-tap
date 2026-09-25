@@ -1,5 +1,6 @@
 import React from 'react';
 import { Signal } from 'lucide-react';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { FrequencyInfo } from '../types';
 import { getTalkgroupColor } from '../utils/colors';
 
@@ -9,6 +10,7 @@ interface VoiceGridProps {
 
 export const VoiceGrid: React.FC<VoiceGridProps> = ({ frequencies }) => {
   const freqList = Object.values(frequencies);
+  const isMobile = useIsMobile();
 
   if (freqList.length === 0) {
     return (
@@ -24,12 +26,15 @@ export const VoiceGrid: React.FC<VoiceGridProps> = ({ frequencies }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Signal size={15} color="var(--accent-cyan)" />
           <h2 style={{ fontSize: '0.80rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0, color: 'var(--text-muted)' }}>
-            Channels — Monitored Frequencies
+            {isMobile ? 'Channels' : 'Channels — Monitored Frequencies'}
           </h2>
           <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{freqList.length}</span>
         </div>
       </div>
 
+      {isMobile ? (
+        <CompactChannelList freqList={freqList} />
+      ) : (
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -156,6 +161,69 @@ export const VoiceGrid: React.FC<VoiceGridProps> = ({ frequencies }) => {
           );
         })}
       </div>
+      )}
+    </div>
+  );
+};
+
+const channelKind = (f: FrequencyInfo) => {
+  const type = f.type.toLowerCase();
+  return {
+    isControl: type.includes('control') || type.includes('cc'),
+    isAlternate: type.includes('alt'),
+    isActiveCall: Boolean(f.active_tgid),
+  };
+};
+
+/** Phone layout: one slim row per channel; active calls sort to the top. */
+const CompactChannelList: React.FC<{ freqList: FrequencyInfo[] }> = ({ freqList }) => {
+  const sorted = [...freqList].sort(
+    (a, b) => Number(Boolean(b.active_tgid)) - Number(Boolean(a.active_tgid)) || a.freq - b.freq
+  );
+
+  return (
+    <div className="glass-panel" style={{ overflow: 'hidden' }}>
+      {sorted.map((f) => {
+        const { isControl, isAlternate, isActiveCall } = channelKind(f);
+        const accent = isActiveCall ? 'var(--accent-amber)' : isControl ? 'var(--accent-cyan)' : 'var(--border-button)';
+
+        return (
+          <div
+            key={f.freq}
+            className="channel-row"
+            style={{
+              borderLeft: `3px solid ${accent}`,
+              background: isActiveCall ? 'rgba(245, 158, 11, 0.07)' : undefined,
+            }}
+          >
+            <span className="mono" style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)', flexShrink: 0 }}>
+              {(f.freq / 1_000_000).toFixed(4)}
+            </span>
+
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isActiveCall ? (
+                <>
+                  <span className="pulse-dot transmitting" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: getTalkgroupColor(f.active_tag), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {f.active_tag || `TG ${f.active_tgid}`}
+                  </span>
+                  {f.active_src && (
+                    <span className="mono" style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)', flexShrink: 0 }}>{f.active_src}</span>
+                  )}
+                </>
+              ) : (
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.04em', color: isControl ? 'var(--accent-cyan)' : 'var(--text-dim)' }}>
+                  {isControl ? 'CONTROL' : isAlternate ? 'ALT CC' : 'IDLE'}
+                </span>
+              )}
+            </div>
+
+            <span className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', flexShrink: 0, textAlign: 'right' }}>
+              {f.counter.toLocaleString()} · <span style={{ color: isActiveCall ? 'var(--accent-amber)' : 'var(--text-muted)' }}>{f.last_activity || '—'}</span>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 };

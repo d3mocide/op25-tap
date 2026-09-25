@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, Zap } from 'lucide-react';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { EventItem } from '../types';
 import { formatSystemLabel, getSystemColor, getTalkgroupCategory, getTalkgroupColor } from '../utils/colors';
 import { formatTs } from '../utils/time';
@@ -11,6 +12,7 @@ interface LiveEventFeedProps {
 
 export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical = false }) => {
   const [filter, setFilter] = useState('');
+  const isMobile = useIsMobile();
 
   // Guarantee strict descending order (newest first) and deduplication
   const sortedEvents = useMemo(() => {
@@ -77,7 +79,7 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical
           <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{filtered.length}</span>
         </div>
 
-        <div style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
+        <div className="panel-search" style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
           <Search size={13} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
           <input
             type="text"
@@ -91,11 +93,13 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical
       </div>
 
       {/* Events Table Container */}
-      <div style={{ flex: 1, overflowY: 'auto', maxHeight: '520px' }}>
+      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '520px' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
             No call events recorded yet. Waiting for live transmissions...
           </div>
+        ) : isMobile ? (
+          <MobileCallList events={filtered} />
         ) : (
           <table className="tactical-table">
             <thead>
@@ -210,3 +214,59 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical
     </div>
   );
 };
+
+/** Phone layout: one compact two-line row per call instead of a 7-column table. */
+const MobileCallList: React.FC<{ events: EventItem[] }> = ({ events }) => (
+  <div>
+    {events.map((ev, idx) => {
+      const tgNum = ev.to_tg ?? ev.to_tgid;
+      const tgName = ev.tg_tag ?? ev.tg_alias ?? (tgNum ? `TG ${tgNum}` : '—');
+      const fromNum = ev.from ?? ev.from_rid;
+      const freqNum = ev.freq ?? ev.frequency;
+      const mhz = freqNum ? (freqNum / 1_000_000).toFixed(4) : null;
+      const durSec = ev.duration_ms > 0 ? (ev.duration_ms / 1000).toFixed(1) + 's' : '< 1s';
+      const sysLabel = formatSystemLabel(ev.system);
+      const siteLabel = ev.site_str || ev.site || '1.26';
+      const cat = getTalkgroupCategory(tgName, ev.tg_group, ev.category);
+
+      return (
+        <div key={ev.id || `${ev.ts}-${idx}`} className="call-row">
+          <div className="call-row-line">
+            <span
+              className="mono"
+              style={{
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                color: cat.color,
+                background: `${cat.color}18`,
+                border: `1px solid ${cat.color}45`,
+                padding: '0 4px',
+                borderRadius: '3px',
+                flexShrink: 0,
+              }}
+            >
+              {cat.label}
+            </span>
+            <span className="call-row-tg" style={{ color: getTalkgroupColor(tgName) }}>{tgName}</span>
+            {tgNum && <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-dim)', flexShrink: 0 }}>{tgNum}</span>}
+            <span className="mono" style={{ marginLeft: 'auto', fontSize: '0.74rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+              {formatTs(ev.ts)}
+            </span>
+          </div>
+          <div className="call-row-line mono" style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+            {fromNum ? (
+              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>{fromNum}</span>
+            ) : (
+              <span>—</span>
+            )}
+            {ev.from_alias && <span className="call-row-alias">{ev.from_alias}</span>}
+            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              {mhz && <>{mhz} · </>}
+              <span style={{ color: getSystemColor(sysLabel) }}>{sysLabel}</span> {siteLabel} · {durSec}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);

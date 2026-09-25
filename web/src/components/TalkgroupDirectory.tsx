@@ -51,7 +51,7 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
           <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{filtered.length}</span>
         </div>
 
-        <div style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
+        <div className="panel-search" style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
           <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
           <input
             type="text"
@@ -65,7 +65,7 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
       </div>
 
       {/* Table Container */}
-      <div style={{ flex: 1, overflowY: 'auto', maxHeight: '550px' }}>
+      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '550px' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
             No talkgroups found.
@@ -76,11 +76,11 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
               <tr>
                 <th style={{ width: '80px' }}>TGID</th>
                 <th>Talkgroup Name / Alias</th>
-                <th>Group / Tag</th>
+                <th className="hide-sm">Group / Tag</th>
                 <th style={{ width: '75px' }}>Calls</th>
-                <th style={{ width: '85px' }}>Airtime</th>
-                <th style={{ width: '85px' }}>Security</th>
-                <th style={{ width: '80px' }}>Last Seen</th>
+                <th className="hide-sm" style={{ width: '85px' }}>Airtime</th>
+                <th style={{ width: '85px' }}><span className="hide-sm">Security</span></th>
+                <th className="hide-sm" style={{ width: '80px' }}>Last Seen</th>
               </tr>
             </thead>
             <tbody>
@@ -94,9 +94,14 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
                     <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
                       {tg.alias || `TG ${tg.tgid}`}
                     </div>
+                    {(tg.tg_group || tg.tg_tag) && (
+                      <div className="show-sm" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                        {tg.tg_group || tg.tg_tag} · {formatLastSeen(tg.last_seen)}
+                      </div>
+                    )}
                   </td>
 
-                  <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                  <td className="hide-sm" style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
                     {tg.tg_group || tg.tg_tag || '—'}
                   </td>
 
@@ -104,23 +109,23 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
                     {tg.call_count.toLocaleString()}
                   </td>
 
-                  <td className="mono" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
+                  <td className="mono hide-sm" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
                     {formatAirtime(tg.total_ms)}
                   </td>
 
                   <td>
                     {tg.encrypted ? (
                       <span className="badge badge-rose" title="Encrypted Voice">
-                        <Lock size={10} /> ENC
+                        <Lock size={10} /> <span className="hide-sm">ENC</span>
                       </span>
                     ) : (
                       <span className="badge badge-emerald" title="Clear Voice">
-                        <Shield size={10} /> CLEAR
+                        <Shield size={10} /> <span className="hide-sm">CLEAR</span>
                       </span>
                     )}
                   </td>
 
-                  <td className="mono" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
+                  <td className="mono hide-sm" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
                     {formatLastSeen(tg.last_seen)}
                   </td>
                 </tr>

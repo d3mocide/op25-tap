@@ -86,7 +86,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+        <div className="panel-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
           {/* Sort Switcher */}
           <div style={{ display: 'inline-flex', background: 'rgba(0, 0, 0, 0.35)', borderRadius: '4px', padding: '2px', border: '1px solid var(--border-subtle)' }}>
             <button
@@ -101,6 +101,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
                 padding: '2px 7px',
                 borderRadius: '3px',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
               title="Sort by latest activity"
             >
@@ -118,6 +119,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
                 padding: '2px 7px',
                 borderRadius: '3px',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
               title="Sort by number of times heard"
             >
@@ -126,7 +128,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
           </div>
 
           {/* Search Filter */}
-          <div style={{ position: 'relative', minWidth: '150px' }}>
+          <div className="panel-search" style={{ position: 'relative', minWidth: '150px' }}>
             <Search size={13} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
             <input
               type="text"
@@ -141,7 +143,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
       </div>
 
       {/* Subscriber Card Grid Container */}
-      <div style={{ flex: 1, overflowY: 'auto', maxHeight: '520px', padding: '12px' }}>
+      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '520px', padding: '12px' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
             No active subscriber radios detected yet.
@@ -150,7 +152,7 @@ export const SubscribersTable: React.FC<SubscribersTableProps> = ({ affiliations
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(200px, 100%), 1fr))',
               gap: '10px',
             }}
           >
