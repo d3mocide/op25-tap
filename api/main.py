@@ -107,8 +107,9 @@ async def lifespan(app: FastAPI):
         whisper_dispatcher_instance.start()
 
         # Initialize Audio Recorder
+        # The recorder follows the first receiver only; Vertex mode records all.
         audio_recorder_instance = AudioRecorder(
-            audio_ws_url=cfg.get("audio_ws_url"),
+            audio_ws_url=audio_ws_urls(cfg)[0],
             whisper_dispatcher=whisper_dispatcher_instance,
         )
         audio_recorder_instance.start()
@@ -628,50 +629,72 @@ async def websocket_live_stream(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
+def audio_ws_urls(cfg: dict) -> List[str]:
+    """OP25 audio websockets, one per receiver in multi_rx channel order.
+
+    OP25_AUDIO_WS may list several, comma-separated: with two receivers on one
+    system OP25 follows two calls at once, one on each.
+    """
+    raw = cfg.get("audio_ws_url") or "ws://127.0.0.1:9000"
+    return [u.strip() for u in raw.split(",") if u.strip()]
+
+
+class _ListenerGone(Exception):
+    pass
+
+
 @app.websocket("/ws/audio")
 async def websocket_audio_proxy(client_ws: WebSocket):
-    """Proxy OP25 port 9000 raw 8kHz PCM audio WebSocket directly to the client browser."""
-    await client_ws.accept()
-    cfg = load_config()
-    op25_audio_url = cfg.get("audio_ws_url") or "ws://127.0.0.1:9000"
-    logger.info(f"Client connected to audio WebSocket proxy. Connecting upstream to {op25_audio_url}")
+    """Relay every OP25 receiver's raw 8 kHz PCM audio to the browser.
 
-    try:
-        async with websockets.connect(op25_audio_url, open_timeout=5) as op25_ws:
-            async def forward_to_client():
-                try:
+    Binary frames get a one-byte receiver prefix and control messages become
+    {"cmd": ..., "ch": n}, so the browser can keep simultaneous calls apart.
+    """
+    await client_ws.accept()
+    urls = audio_ws_urls(load_config())
+    logger.info(f"Client connected to audio WebSocket proxy. Relaying receivers {urls}")
+    send_lock = asyncio.Lock()
+
+    async def send(**kw):
+        try:
+            async with send_lock:
+                await client_ws.send(kw)
+        except Exception as exc:
+            raise _ListenerGone from exc
+
+    async def relay(ch: int, url: str):
+        # One receiver dropping out must not silence the other: reconnect it.
+        while True:
+            try:
+                async with websockets.connect(url, open_timeout=5) as op25_ws:
                     async for message in op25_ws:
                         if isinstance(message, bytes):
-                            await client_ws.send_bytes(message)
-                        else:
-                            await client_ws.send_text(message)
-                except Exception:
-                    pass
+                            await send(type="websocket.send", bytes=bytes([ch]) + message)
+                            continue
+                        try:
+                            data = json.loads(message)
+                        except ValueError:
+                            continue
+                        if isinstance(data, dict):
+                            await send(type="websocket.send", text=json.dumps({**data, "ch": ch}))
+            except (_ListenerGone, asyncio.CancelledError):
+                raise
+            except Exception as e:
+                logger.debug(f"Audio relay for receiver {ch} ({url}) dropped: {e}")
+            await asyncio.sleep(2)
 
-            async def forward_to_op25():
-                try:
-                    while True:
-                        msg = await client_ws.receive()
-                        if msg.get("type") == "websocket.disconnect":
-                            return
-                        if "bytes" in msg and msg["bytes"]:
-                            await op25_ws.send(msg["bytes"])
-                        elif "text" in msg and msg["text"]:
-                            await op25_ws.send(msg["text"])
-                except Exception:
-                    pass
+    async def until_closed():
+        while (await client_ws.receive()).get("type") != "websocket.disconnect":
+            pass
 
-            # When either side goes away, tear down the other instead of leaving
-            # the upstream socket open until its next failed send.
-            tasks = [asyncio.create_task(forward_to_client()), asyncio.create_task(forward_to_op25())]
-            _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for t in pending:
-                t.cancel()
-    except (WebSocketDisconnect, asyncio.CancelledError):
-        pass
-    except Exception as e:
-        logger.warning(f"Audio WS proxy disconnected: {e}")
+    tasks = [asyncio.create_task(until_closed())]
+    tasks += [asyncio.create_task(relay(ch, url)) for ch, url in enumerate(urls)]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         try:
             await client_ws.close()
         except Exception:
