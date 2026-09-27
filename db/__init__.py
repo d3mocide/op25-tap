@@ -97,6 +97,10 @@ def db():
 
 # Rows of `events` (alias `e`) that count as calls: talkgroup calls, minus the
 # zero-duration call_log rows that duplicate a live-tracked transmission.
+# Voice-intercept rows (from Vertex) duplicate calls the trunking poller already
+# logged: listed as calls, but kept out of statistics.
+VOICE_INTERCEPT = "Voice Intercept"
+
 CALL_EVENT_FILTER = """(
     e.to_tgid IS NOT NULL
     AND NOT (
@@ -111,6 +115,8 @@ CALL_EVENT_FILTER = """(
         )
     )
 )"""
+
+STATS_EVENT_FILTER = f"""({CALL_EVENT_FILTER} AND e.event_type IS NOT '{VOICE_INTERCEPT}')"""
 
 
 # ---- upsert helpers ----------------------------------------------------------

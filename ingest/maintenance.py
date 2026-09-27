@@ -18,7 +18,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
-from db import CALL_EVENT_FILTER, DATA_DIR, DB_PATH, _connect
+from db import STATS_EVENT_FILTER, DATA_DIR, DB_PATH, _connect
 
 logger = logging.getLogger("op25-maintenance")
 
@@ -69,7 +69,7 @@ def rollup_day(conn, day: date):
     """Rebuild all daily_* rows for one local day from raw events (idempotent)."""
     start, end = day_bounds(day)
     d = day.isoformat()
-    where = f"e.ts >= ? AND e.ts < ? AND e.system_id IS NOT NULL AND {CALL_EVENT_FILTER}"
+    where = f"e.ts >= ? AND e.ts < ? AND e.system_id IS NOT NULL AND {STATS_EVENT_FILTER}"
     conn.execute("BEGIN IMMEDIATE")
     try:
         for table in ("daily_system_stats", "daily_tg_stats", "daily_rid_stats"):

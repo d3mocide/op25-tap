@@ -18,11 +18,12 @@ from fastapi.staticfiles import StaticFiles
 import requests
 import websockets
 
-from db import CALL_EVENT_FILTER, DATA_DIR, db, init_db
+from db import CALL_EVENT_FILTER, STATS_EVENT_FILTER, DATA_DIR, db, init_db
 from ingest.audio_recorder import AudioRecorder
 from ingest.maintenance import MaintenanceWorker
 from ingest.op25_trunk import Op25Poller, load_config
 from ingest.whisper_client import WhisperDispatcher
+from ingest.vertex_feed import VertexFeed, vertex_configured
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("op25-api")
@@ -70,6 +71,7 @@ poller_instance: Optional[Op25Poller] = None
 poller_thread: Optional[threading.Thread] = None
 audio_recorder_instance: Optional[AudioRecorder] = None
 whisper_dispatcher_instance: Optional[WhisperDispatcher] = None
+vertex_feed_instance: Optional[VertexFeed] = None
 maintenance_instance: Optional[MaintenanceWorker] = None
 
 
@@ -77,6 +79,7 @@ maintenance_instance: Optional[MaintenanceWorker] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global poller_instance, poller_thread, audio_recorder_instance, whisper_dispatcher_instance, maintenance_instance
+    global vertex_feed_instance
     init_db()
 
     # Rollups, retention purge and audio pruning
@@ -88,21 +91,27 @@ async def lifespan(app: FastAPI):
     url = cfg.get("url", "http://127.0.0.1:8080/")
     poll_interval = float(cfg.get("poll_interval", 1.0))
 
-    # Initialize Whisper Dispatcher
-    whisper_dispatcher_instance = WhisperDispatcher(
-        on_transcript=lambda eid, text, audio_file: manager.broadcast_sync(
-            "transcript",
-            {"id": eid, "transcript": text, "has_audio": bool(audio_file)},
+    if vertex_configured():
+        # Vertex already records and transcribes every call OP25 follows; show
+        # its call log as voice intercepts instead of doing that work twice.
+        vertex_feed_instance = VertexFeed(event_callback=manager.broadcast_sync)
+        vertex_feed_instance.start()
+    else:
+        # Initialize Whisper Dispatcher
+        whisper_dispatcher_instance = WhisperDispatcher(
+            on_transcript=lambda eid, text, audio_file: manager.broadcast_sync(
+                "transcript",
+                {"id": eid, "transcript": text, "has_audio": bool(audio_file)},
+            )
         )
-    )
-    whisper_dispatcher_instance.start()
+        whisper_dispatcher_instance.start()
 
-    # Initialize Audio Recorder
-    audio_recorder_instance = AudioRecorder(
-        audio_ws_url=cfg.get("audio_ws_url"),
-        whisper_dispatcher=whisper_dispatcher_instance,
-    )
-    audio_recorder_instance.start()
+        # Initialize Audio Recorder
+        audio_recorder_instance = AudioRecorder(
+            audio_ws_url=cfg.get("audio_ws_url"),
+            whisper_dispatcher=whisper_dispatcher_instance,
+        )
+        audio_recorder_instance.start()
 
     # Initialize OP25 Trunk Poller
     poller_instance = Op25Poller(
@@ -132,6 +141,8 @@ async def lifespan(app: FastAPI):
         audio_recorder_instance.stop()
     if whisper_dispatcher_instance:
         whisper_dispatcher_instance.stop()
+    if vertex_feed_instance:
+        vertex_feed_instance.stop()
 
 
 app = FastAPI(title="op25-tap API", lifespan=lifespan)
@@ -253,7 +264,7 @@ def get_talkgroups(
             FROM events e
             LEFT JOIN talkgroups tg ON e.system_id = tg.system_id AND e.to_tgid = tg.tgid
             LEFT JOIN systems s ON e.system_id = s.id
-            WHERE {CALL_EVENT_FILTER}
+            WHERE {STATS_EVENT_FILTER}
         """
         query = _add_range(query, params, "e.ts", from_ts, to_ts)
         order = "call_count DESC"
@@ -298,7 +309,7 @@ def get_radios(
             FROM events e
             LEFT JOIN radios r ON e.system_id = r.system_id AND e.from_rid = r.rid
             LEFT JOIN systems s ON e.system_id = s.id
-            WHERE {CALL_EVENT_FILTER} AND e.from_rid IS NOT NULL AND e.from_rid != 0
+            WHERE {STATS_EVENT_FILTER} AND e.from_rid IS NOT NULL AND e.from_rid != 0
         """
         query = _add_range(query, params, "e.ts", from_ts, to_ts)
         order = "call_count DESC"
@@ -380,7 +391,7 @@ def get_timeline(
             f"""SELECT CAST((e.ts - ?) / ? AS INTEGER) as b, COUNT(*) as calls,
                        COALESCE(SUM(e.duration_ms), 0) as airtime_ms, SUM(e.encrypted > 0) as encrypted
                 FROM events e
-                WHERE e.ts >= ? AND e.ts < ? AND {CALL_EVENT_FILTER}
+                WHERE e.ts >= ? AND e.ts < ? AND {STATS_EVENT_FILTER}
                 GROUP BY b""",
             (from_ts, bucket_sec, from_ts, to_ts)):
         if 0 <= r["b"] < n:
