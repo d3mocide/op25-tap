@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { Upsampler } from './upsample';
 
 const WS_AUDIO_SAMPLE_RATE = 8000;
 const CALL_GAP_MS = 2500;    // no frames this long ends a call (backup to audio_drain)
 const MAX_HOLD_MS = 90_000;  // a held call older than this is stale: drop it
+// Upsample and schedule only this far ahead of playback: a held call can carry
+// a minute of backlog, and converting it in one go stalls the page.
+const AHEAD_S = 1.0;
+const LEAD_S = 0.05;         // start a call this far ahead of now
 
 type Receiver = {
   frames: Int16Array[];   // received, not yet scheduled
@@ -20,7 +25,12 @@ export function useOp25Audio() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const nextPlayTimeRef = useRef<number>(0);
+  // Where the next audio goes, in whole context sample frames. Audio is
+  // upsampled to the context rate here (upsample.ts): browsers resample 8 kHz
+  // buffers by linear interpolation, which sounds gritty and "digital".
+  const nextFrameRef = useRef<number>(0);
+  const upRef = useRef<Upsampler | null>(null);
+  const tailDoneRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
 
@@ -36,7 +46,8 @@ export function useOp25Audio() {
     receiversRef.current = new Map();
     activeRef.current = null;
     waitingRef.current = [];
-    nextPlayTimeRef.current = 0;
+    nextFrameRef.current = 0;
+    upRef.current = null;
     if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     advanceTimerRef.current = null;
   };
@@ -50,37 +61,49 @@ export function useOp25Audio() {
     return rx;
   };
 
-  // Schedule the active receiver's buffered frames back to back.
+  // Queue already-upsampled audio right after what is scheduled.
+  const play = (ctx: AudioContext, gain: GainNode, samples: Float32Array<ArrayBuffer>) => {
+    if (samples.length === 0) return;
+    const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+    buffer.copyToChannel(samples, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(gain);
+    const now = Math.ceil(ctx.currentTime * ctx.sampleRate);
+    if (nextFrameRef.current < now) nextFrameRef.current = now + Math.round(LEAD_S * ctx.sampleRate);  // underrun
+    source.start(nextFrameRef.current / ctx.sampleRate);
+    nextFrameRef.current += samples.length;
+  };
+
+  // Schedule the active receiver's buffered frames, up to AHEAD_S ahead.
   const flush = () => {
     const ctx = audioCtxRef.current;
     const gain = gainNodeRef.current;
     const ch = activeRef.current;
     if (!ctx || !gain || ch === null) return;
     const rx = receiver(ch);
-    if (nextPlayTimeRef.current < ctx.currentTime) {
-      nextPlayTimeRef.current = ctx.currentTime + 0.05;
-    }
-    while (rx.frames.length > 0) {
+    if (!upRef.current) upRef.current = new Upsampler(WS_AUDIO_SAMPLE_RATE, ctx.sampleRate);
+    const horizon = (ctx.currentTime + AHEAD_S) * ctx.sampleRate;
+    while (rx.frames.length > 0 && nextFrameRef.current < horizon) {
       const samples = rx.frames.shift()!;
-      const buffer = ctx.createBuffer(1, samples.length, WS_AUDIO_SAMPLE_RATE);
-      const channelData = buffer.getChannelData(0);
-      for (let i = 0; i < samples.length; i++) {
-        channelData[i] = samples[i] / 32768.0;
-      }
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(gain);
-      source.start(nextPlayTimeRef.current);
-      nextPlayTimeRef.current += buffer.duration;
+      const f = new Float32Array(samples.length);
+      for (let i = 0; i < samples.length; i++) f[i] = samples[i] / 32768.0;
+      play(ctx, gain, upRef.current.push(f));
     }
-    if (!rx.onAir) scheduleAdvance();
+    if (!rx.onAir && rx.frames.length === 0) {
+      if (!tailDoneRef.current) {
+        tailDoneRef.current = true;
+        play(ctx, gain, upRef.current.flush());
+      }
+      scheduleAdvance();
+    }
   };
 
   // Once the active call has ended and finished playing, move to the next held one.
   const scheduleAdvance = () => {
     const ctx = audioCtxRef.current;
     if (!ctx || advanceTimerRef.current) return;
-    const waitMs = Math.max(0, (nextPlayTimeRef.current - ctx.currentTime) * 1000);
+    const waitMs = Math.max(0, (nextFrameRef.current / ctx.sampleRate - ctx.currentTime) * 1000);
     advanceTimerRef.current = setTimeout(() => {
       advanceTimerRef.current = null;
       const ch = activeRef.current;
@@ -95,7 +118,8 @@ export function useOp25Audio() {
           continue;
         }
         activeRef.current = next;
-        nextPlayTimeRef.current = 0;
+        upRef.current = null;          // a fresh upsampler per call
+        tailDoneRef.current = false;
         flush();
         return;
       }
@@ -107,12 +131,14 @@ export function useOp25Audio() {
     if (!rx.onAir) {
       rx.onAir = true;
       rx.callStartedAt = Date.now();
+      if (ch === activeRef.current) tailDoneRef.current = false;   // same receiver, next call
     }
     rx.lastFrameAt = Date.now();
     rx.frames.push(samples);
     if (activeRef.current === null) {
       activeRef.current = ch;
-      nextPlayTimeRef.current = 0;
+      upRef.current = null;
+      tailDoneRef.current = false;
     }
     if (ch === activeRef.current) {
       flush();
@@ -124,7 +150,7 @@ export function useOp25Audio() {
   const onCallEnd = (ch: number) => {
     const rx = receiver(ch);
     rx.onAir = false;
-    if (ch === activeRef.current) scheduleAdvance();
+    if (ch === activeRef.current) flush();
   };
 
   const connectWebSocket = () => {
@@ -181,14 +207,16 @@ export function useOp25Audio() {
     }
   };
 
-  // Backup for a lost audio_drain: a receiver silent this long has ended its call.
+  // Keep scheduling a held backlog as playback advances, and end calls whose
+  // audio_drain got lost (a receiver silent this long has ended its call).
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now();
       receiversRef.current.forEach((rx, ch) => {
         if (rx.onAir && now - rx.lastFrameAt > CALL_GAP_MS) onCallEnd(ch);
       });
-    }, 500);
+      if (isPlayingRef.current) flush();
+    }, 100);
     return () => clearInterval(id);
   }, []);
 
@@ -196,12 +224,8 @@ export function useOp25Audio() {
     // 1. Initialize AudioContext on user interaction
     if (!audioCtxRef.current) {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      let ctx: AudioContext;
-      try {
-        ctx = new AudioCtxClass({ sampleRate: WS_AUDIO_SAMPLE_RATE });
-      } catch (e) {
-        ctx = new AudioCtxClass();
-      }
+      // Native rate: audio is upsampled to it here (see flush).
+      const ctx: AudioContext = new AudioCtxClass();
       const gain = ctx.createGain();
       gain.gain.value = isMuted ? 0 : volume;
       gain.connect(ctx.destination);
