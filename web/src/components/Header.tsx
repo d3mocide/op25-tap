@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Headphones, Radio, Volume2, VolumeX } from 'lucide-react';
+import { Headphones, Volume2, VolumeX } from 'lucide-react';
 import type { TelemetryStatus } from '../types';
 import { useOp25Audio } from '../hooks/useOp25Audio';
 import '../styles/header.css';
@@ -34,9 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected }) => {
 
         {/* Brand & Connection State */}
         <div className="hdr-brand">
-          <div className="icon-tile hdr-logo">
-            <Radio size={19} />
-          </div>
+          <img className="hdr-logo" src="/favicon.svg" width={38} height={38} alt="" />
           <div className="grow">
             <div className="row">
               <h1 className="hdr-name">

@@ -30,3 +30,5 @@
 .hdr-volume .audio-slider { width: 64px; flex-shrink: 0; }
 .hdr-vol-read { width: 28px; text-align: center; font-size: 0.7rem; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
 .hdr-vol-read.muted { color: var(--accent-fire); }
+
+.hdr-logo { width: 38px; height: 38px; border-radius: 9px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.5); }
