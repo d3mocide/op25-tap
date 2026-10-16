@@ -12,6 +12,7 @@
   <img alt="Engine boatbod/op25" src="https://img.shields.io/badge/engine-boatbod%2Fop25-f59e0b?labelColor=0b0c0f">
   <img alt="FastAPI and React" src="https://img.shields.io/badge/stack-FastAPI%20%7C%20React-10b981?labelColor=0b0c0f">
   <img alt="Docker" src="https://img.shields.io/badge/deploy-Docker-38bdf8?labelColor=0b0c0f">
+  <img alt="License GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-c084fc?labelColor=0b0c0f">
 </p>
 
 <p align="center">
@@ -185,6 +186,10 @@ op25-tap/
 ```
 
 </details>
+
+## License
+
+GPL-3.0. See [LICENSE](LICENSE). OP25 runs as a separate process that op25-tap only queries over HTTP and reads audio from. The bundled fonts (Inter, JetBrains Mono, Share Tech Mono) are licensed under the SIL Open Font License 1.1.
 
 ## Acknowledgments & Credits
 
