@@ -32,10 +32,10 @@
   --font-display: 'Share Tech Mono', var(--font-mono);
 
   /* Glass: translucent charcoal over the ASCII backdrop */
-  --glass: rgb(20 21 27 / 0.62);
-  --glass-strong: rgb(22 23 29 / 0.86);
+  --glass: rgb(20 21 27 / 0.86);
+  --glass-strong: rgb(22 23 29 / 0.95);
   --glass-solid: #14151a; /* fallback when blur is unavailable or unwanted */
-  --glass-blur: 14px;
+  --glass-blur: 28px;
   --glass-saturate: 150%;
   --edge-hi: rgb(255 255 255 / 0.1);
   --shadow-panel: 0 18px 40px -22px rgb(0 0 0 / 0.8), 0 2px 6px -2px rgb(0 0 0 / 0.5);
@@ -106,6 +106,12 @@ button {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   transition: border-color 0.15s ease;
+}
+
+/* No backdrop-filter support (some browsers / software rendering): a translucent panel would
+   show the backdrop crisp and unblurred behind the text, so use a solid one instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass: rgb(20 21 27 / 0.97); --glass-strong: #14151a; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
