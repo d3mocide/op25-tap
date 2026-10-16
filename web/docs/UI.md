@@ -1,6 +1,6 @@
 # op25-tap UI guide
 
-![Live monitor](screenshots/monitor.png)
+![Live monitor](screenshots/monitor.webp)
 
 ## Live monitor
 
@@ -10,7 +10,7 @@
 
 ## Talkgroups and radios
 
-![Detail drawer](screenshots/drawer.png)
+![Detail drawer](screenshots/drawer.webp)
 
 - Click any talkgroup or radio ID, anywhere, to open a drawer with its stats, a 24-hour activity line, who it is affiliated with and its recent calls (with transcripts).
 - **Pin** a talkgroup with its star (call history, transcripts, directory or drawer). Pinned talkgroups float to the top of the directory.
@@ -41,15 +41,15 @@ Notable alerts raised while you are watching (spikes, new talkgroup / site / rad
 
 | Trends | RF Scopes |
 | --- | --- |
-| ![Trends](screenshots/trends.png) | ![RF Scopes](screenshots/scopes.png) |
+| ![Trends](screenshots/trends.webp) | ![RF Scopes](screenshots/scopes.webp) |
 
 | Topology | Alerts |
 | --- | --- |
-| ![Topology](screenshots/topology.png) | ![Alerts](screenshots/alerts.png) |
+| ![Topology](screenshots/topology.webp) | ![Alerts](screenshots/alerts.webp) |
 
 On a phone the tab strip scrolls sideways and channels collapse to a compact list:
 
-<img src="screenshots/mobile.png" alt="Mobile layout" width="280">
+<img src="screenshots/mobile.webp" alt="Mobile layout" width="280">
 
 ## Preferences
 

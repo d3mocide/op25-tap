@@ -1,90 +1,86 @@
-# op25-tap
+<p align="center">
+  <img src="web/docs/assets/banner.webp" alt="op25-tap: P25 trunking telemetry and forensics for OP25" width="100%">
+</p>
 
-Real-time APCO P25 trunking telemetry, subscriber monitor, and forensics dashboard fed by OP25's HTTP status endpoint.
+<p align="center">
+  <b>A P25 trunking dashboard in the browser.</b><br>
+  Live calls, subscribers and forensics for <a href="https://github.com/boatbod/op25">OP25</a>, with an ASCII airwaves backdrop that shows what your receiver is hearing.
+</p>
 
-> Inspired by [**colonelpanichacks/trunk-tap**](https://github.com/colonelpanichacks/trunk-tap), adapting its tactical telemetry dashboard, call history, and forensic insights for OP25 systems.
+<p align="center">
+  <img alt="APCO P25 Phase 1 and 2" src="https://img.shields.io/badge/protocol-APCO%20P25%20Ph1%20%7C%20Ph2-00e5ff?labelColor=0b0c0f">
+  <img alt="Engine boatbod/op25" src="https://img.shields.io/badge/engine-boatbod%2Fop25-f59e0b?labelColor=0b0c0f">
+  <img alt="FastAPI and React" src="https://img.shields.io/badge/stack-FastAPI%20%7C%20React-10b981?labelColor=0b0c0f">
+  <img alt="Docker" src="https://img.shields.io/badge/deploy-Docker-38bdf8?labelColor=0b0c0f">
+</p>
 
-Built with a **Python FastAPI** backend (REST + WebSockets) and a modern **Vite + React / TypeScript** tactical frontend.
+<p align="center">
+  <img src="web/docs/screenshots/monitor.webp" alt="op25-tap live monitor: channel tiles, on-air bar, call history and active subscribers" width="100%">
+</p>
 
----
+## What it does
 
-## Prerequisites
+- **Steady live monitor.** Every monitored frequency keeps a fixed tile in frequency order, and an on-air bar lists each active call with a running timer on every tab. Calls starting and stopping change colours and text, never the layout.
+- **Airwaves backdrop.** An ASCII field behind the glass panels mirrors the receiver. Static crackles harder as tuning error grows, a carrier ticks on every control-channel hit, and a ring labelled with the talkgroup appears when a channel keys up (colour by category; encrypted calls scramble). Off, Subtle, Normal or Lively, and it dims when the system goes quiet.
+- **Call forensics.** A real-time call stream (talkgroup, source radio, frequency, duration, `CLEAR` / `ENC`), subscriber affiliations, a talkgroup directory with airtime, an adjacent-site topology map, and alerts for new radios, talkgroups, sites and activity spikes.
+- **Focus on what matters.** Click any talkgroup or radio ID for its stats, 24-hour activity, affiliations and recent calls. Pin talkgroups and **Follow** them to narrow every panel. Lists freeze under your mouse, and keyboard shortcuts cover tabs, search and audio (press `?`).
+- **History and trends.** Switch from Live to any past range (bookmarkable URL), drill into an activity timeline, and read 7/30/90-day trends built from daily rollups that outlive the raw data.
+- **Voice intercepts.** Live browser audio from OP25's PCM port, recorded call audio for playback, and optional Whisper transcription with search.
+- **Honest status.** An offline or reconnecting banner replaces stale "live" data, and storage stays bounded by a retention policy.
+- **One container, nothing external.** FastAPI serves the API, the WebSocket stream and the compiled UI on a single port. Fonts are self-hosted, so the page makes no CDN requests.
+- **A light touch on OP25.** It asks OP25's HTTP endpoint for status and reads its audio port. The only control command it ever sends is the one that toggles the RF scope plots.
 
-**`op25-tap` requires a fully working installation of OP25 by boatbod:**
-
-- **OP25 by boatbod**: [https://github.com/boatbod/op25](https://github.com/boatbod/op25)
-  - Ensure OP25 is installed, configured for your local SDR (RTL-SDR, HackRF, Airspy, etc.), and actively decoding your target trunked radio system.
-  - **HTTP Server**: OP25 must be launched with its HTTP server status endpoint enabled (e.g. `-l http:0.0.0.0:8080` in `rx.py` or `multi_rx.py`). This is the status feed that `op25-tap` polls.
-  - **Live Audio & Transcription (Optional)**: If you want live browser audio streaming and remote Whisper speech-to-text transcription, ensure OP25's raw audio forwarding is enabled (e.g. `-V` flags forwarding 8 kHz mono raw PCM to port `9000`).
-
----
-
-## Features
-
-- **Live RF Frequency Monitoring**: Visual cards for all monitored frequencies showing channel type (`voice`, `pri-cc`, `alt-cc`), hit counters, and real-time active transmissions.
-- **Real-Time Call Stream**: WebSocket-driven call feed showing Talkgroups, Source Radio IDs (RIDs), frequencies, duration, and encryption status (`CLEAR` / `ENC`).
-- **Subscriber Registrations & Affiliations**: Live tracking of subscriber Wireless User IDs (RIDs) and their affiliated talkgroups from OP25's `wuid_data`.
-- **Talkgroups Directory**: Complete inventory of talkgroups with call statistics and total airtime.
-- **History Mode & Date-Range Picker**: Switch from Live to History to replay any past period: presets (last hour, 24h, today, yesterday, 7/30 days), a custom range, and step back/forward buttons. Every panel (calls, transcripts and audio, subscribers, talkgroups, alerts) is scoped to the range, and the URL (`?from=…&to=…`) can be bookmarked or shared.
-- **Activity Timeline**: Calls-per-interval bar chart for the selected range with alert markers. Drag to zoom, click a bar to drill in, browser Back to zoom out.
-- **Trends Dashboard**: 7/30/90-day KPIs with sparklines and period-over-period change, a clickable calls-per-day chart, and top talkgroups/radios with daily sparklines. Built from daily rollups that are kept after raw history expires.
-- **Retention Policy**: Raw history and call audio are purged on a schedule so the database doesn't grow without bound; disk usage is shown in the footer.
-- **Network Topology**: Discovered adjacent neighbor towers and uplink frequencies from control channel broadcast messages.
-- **Embedded Audio Stream**: Integrated Icecast audio player with live streaming and volume control.
-- **Remote Whisper Speech-to-Text**: Automatic background capture of OP25 port 9000 raw PCM audio, retention window buffering, remote Whisper transcription, and inline speech bubbles with historical audio playback in the Call History feed.
-- **Single-Port or Containerized**: FastAPI serves both the API, WebSocket stream, and compiled frontend SPA from a single port.
-
----
-
-## Quickstart
-
-### Running with Docker
-
-#### Production (Single Port 8000)
-```bash
-# Start pre-compiled single-port production instance
-docker compose up --build -d
 ```
-Visit **`http://localhost:8000/`** in your browser.
-
-#### Development with Hot-Reload (Vite HMR on Port 5173)
-```bash
-# Start dev instance with live UI hot-reload and backend auto-reload
-docker compose -f docker-compose.dev.yml up --build -d
-```
-Visit **`http://localhost:5173/`** in your browser (or the `FRONTEND_PORT` you set). Any edits in `web/src/` or backend Python files update live instantly without rebuilding the container!
-
-
-### Running Locally
-
-#### 1. Setup Backend
-
-```bash
-# Create venv and install dependencies
-uv venv
-uv pip install -r requirements.txt
-
-# Start backend server (serves API and compiled frontend at http://localhost:8000)
-# (Windows: .venv\Scripts\uvicorn.exe ...)
-.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+OP25 ─ HTTP status :8080 ─▶ poller ─▶ diff + anomaly engine ─▶ SQLite ─┐
+     └ raw PCM audio :9000 ─▶ recorder ─▶ Whisper (optional) ──────────┤
+                                                       FastAPI ─ REST + WebSocket ─▶ browser
 ```
 
-#### 2. Development Mode with Frontend Hot-Reload
+## Screenshots
 
-```bash
-# In another terminal:
-cd web
-npm install
-npm run dev
+| Detail drawer | Trends |
+| --- | --- |
+| ![Talkgroup detail drawer](web/docs/screenshots/drawer.webp) | ![Trends dashboard](web/docs/screenshots/trends.webp) |
+
+| Network topology | RF scopes |
+| --- | --- |
+| ![Network topology](web/docs/screenshots/topology.webp) | ![RF scopes](web/docs/screenshots/scopes.webp) |
+
+| Alerts and forensics | Phone |
+| --- | --- |
+| ![Alerts](web/docs/screenshots/alerts.webp) | <img src="web/docs/screenshots/mobile.webp" alt="Mobile layout" width="240"> |
+
+On a wide screen the Subscribers tab fills the window, and the radio pings show in the margins:
+
+![Subscribers on a wide screen](web/docs/screenshots/subscribers-wide.webp)
+
+## Requirements
+
+**A working OP25 by [boatbod](https://github.com/boatbod/op25).** It must be installed, configured for your SDR (RTL-SDR, HackRF, Airspy, ...) and actively decoding your trunked system.
+
+- **HTTP server (required).** Launch OP25 with its status endpoint enabled, for example `-l http:0.0.0.0:8080` in `rx.py` or `multi_rx.py`. This is the feed op25-tap polls.
+- **Live audio and transcription (optional).** Enable OP25's raw audio forwarding (for example `-V` flags sending 8 kHz mono PCM to port `9000`) for browser audio and Whisper speech-to-text.
+
+## Quick start
+
+```sh
+git clone https://github.com/d3mocide/op25-tap && cd op25-tap
+cp .env.example .env          # set OP25_URL to your OP25 HTTP endpoint
+docker compose up -d --build  # UI on http://localhost:8000
 ```
 
-Open **`http://localhost:5173/`** for hot-reloading (API requests and WebSockets are automatically proxied to port 8000).
+That is enough for live monitoring. Add `WHISPER_URL` for transcripts, and see [Configuration](#configuration) for retention, time zone and multi-receiver setups. It runs on a 64-bit Raspberry Pi (arm64), which is where it is developed.
 
----
+Put a reverse proxy in front for TLS and authentication if you expose it beyond your LAN.
+
+## Docs
+
+[UI guide](web/docs/UI.md) · [Configuration](#configuration) · [Advanced config](config/README.md) · [Design notes](DESIGN.md)
 
 ## Configuration
 
-### 1. Primary Configuration: `.env` (Recommended)
+<details>
+<summary><b>Environment variables (<code>.env</code>)</b></summary>
 
 For almost all setups, configuration is handled via environment variables or a `.env` file in the project root. Copy `.env.example` to get started:
 
@@ -112,7 +108,10 @@ cp .env.example .env
 | `MAINTENANCE_INTERVAL_MINUTES` | `15`        | How often rollups, purging and audio cleanup run            |
 | `TZ`                 | _(system)_            | Time zone that defines "a day" for daily trends (e.g. `America/Chicago`; set it in Docker, which defaults to UTC) |
 
-### 2. Optional Advanced Configuration: `config/`
+</details>
+
+<details>
+<summary><b>Advanced configuration (<code>config/</code>)</b></summary>
 
 If you require advanced capabilities such as polling multiple OP25 instances simultaneously, granular hex NAC lookup tables, or custom regex naming rules, you can optionally supply JSON files in the `config/` folder:
 
@@ -121,7 +120,10 @@ If you require advanced capabilities such as polling multiple OP25 instances sim
 
 _For in-depth schema documentation on JSON configuration, see [config/README.md](config/README.md)._
 
-### 3. Data Retention & History
+</details>
+
+<details>
+<summary><b>Data retention and history</b></summary>
 
 A background maintenance job (every `MAINTENANCE_INTERVAL_MINUTES`) keeps storage bounded:
 
@@ -136,40 +138,55 @@ Every day is rolled up before it's purged. Freed space is returned to the OS (SQ
 
 Schema changes are applied automatically on startup through numbered migrations (`PRAGMA user_version`). The first start after upgrading drops the unused trunk-tap tables and runs a one-time `VACUUM`, which can take a moment on a large database.
 
----
+</details>
 
-## Project Structure
+## Develop
+
+Requires Docker, or Python 3.12 with [`uv`](https://docs.astral.sh/uv/) and Node 22 for a local setup.
+
+```sh
+# Backend and frontend in Docker with hot reload (UI on :5173)
+docker compose -f docker-compose.dev.yml up --build -d
+
+# Backend tests
+uv venv && uv pip install -r requirements.txt pytest httpx2
+.venv/bin/pytest tests
+
+# Frontend
+cd web && npm install
+npm run dev                                       # Vite on :5173, proxies /api and /ws to :8000
+npm run build                                     # typecheck and production bundle
+BASE_URL=http://localhost:8000 npm run test:e2e   # Playwright smoke tests (first: npx playwright install chromium)
+```
+
+The end-to-end tests run against a live instance, because they check real behaviour such as the layout staying put while calls come and go. Point `BASE_URL` at a running op25-tap that is receiving telemetry.
+
+<details>
+<summary><b>Project structure</b></summary>
 
 ```
 op25-tap/
 ├── api/                  # FastAPI application & WebSocket handlers
-│   └── main.py
-├── config/               # Configuration files (endpoints, system mappings)
-│   ├── op25.json
-│   └── op25.example.json
+├── config/               # Optional endpoint and system-name mappings
 ├── db/                   # SQLite schema & database helpers
-│   ├── __init__.py
-│   └── schema.sql
-├── ingest/               # OP25 status poller, diff engine, anomaly detection, retention
-│   ├── op25_trunk.py
-│   ├── anomalies.py
-│   └── maintenance.py    # daily rollups, retention purge, audio cleanup
-├── samples/              # Captured raw OP25 status dumps
-├── tests/                # Automated ingest tests
-├── web/                  # Vite + React / TypeScript tactical frontend
+├── ingest/               # OP25 poller, audio recorder, Whisper client, anomaly detection, retention
+├── tests/                # Backend tests
+├── web/                  # Vite + React / TypeScript frontend
 │   ├── src/
-│   │   ├── components/   # Header, VoiceGrid, LiveEventFeed, SubscribersTable, etc.
-│   │   ├── hooks/        # useLiveTelemetry (WebSocket), useTimeRange (URL), useHistoryData
-│   │   └── types.ts
-│   └── dist/             # Compiled production bundle
-├── Dockerfile            # Multi-stage Docker build
+│   │   ├── components/   # Header, VoiceGrid, NowTalking, AsciiBackdrop, EntityDrawer, feeds, tabs
+│   │   ├── context/      # Pinned talkgroups, follow mode, detail drawer
+│   │   ├── hooks/        # Live telemetry (WebSocket), history, time range, list hold
+│   │   └── styles/       # Shared and per-feature CSS
+│   ├── e2e/              # Playwright smoke tests
+│   ├── docs/             # UI guide, screenshots, README banner
+│   └── public/           # Icons and web manifest
+├── Dockerfile            # Multi-stage build (frontend, then Python runtime)
 └── docker-compose.yml
 ```
 
----
+</details>
 
 ## Acknowledgments & Credits
 
 - [**colonelpanichacks/trunk-tap**](https://github.com/colonelpanichacks/trunk-tap) — The pioneer SDRTrunk forensics dashboard whose architecture, anomaly tracking patterns, and UI philosophy directly inspired `op25-tap`.
 - [**boatbod/op25**](https://github.com/boatbod/op25) — The foundational open-source OP25 software-defined radio implementation for P25 Phase 1 / Phase 2 digital trunking and HTTP telemetry reporting.
-
