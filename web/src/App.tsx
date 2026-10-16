@@ -339,11 +339,11 @@ function AppInner() {
         )}
 
         {tab === 'subscribers' && (
-          <div className="grow"><SubscribersTable affiliations={affiliations} /></div>
+          <div className="grow tab-fill"><SubscribersTable affiliations={affiliations} /></div>
         )}
 
         {tab === 'talkgroups' && (
-          <div className="grow"><TalkgroupDirectory talkgroups={talkgroups} /></div>
+          <div className="grow tab-fill"><TalkgroupDirectory talkgroups={talkgroups} /></div>
         )}
 
         {tab === 'topology' && (
@@ -351,7 +351,7 @@ function AppInner() {
         )}
 
         {tab === 'anomalies' && (
-          <div className="grow"><AnomaliesPanel anomalies={anomalies} /></div>
+          <div className="grow tab-fill"><AnomaliesPanel anomalies={anomalies} /></div>
         )}
       </main>
 

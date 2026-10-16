@@ -19,6 +19,8 @@ const FRAME_MS = 1000 / 15;
 const RAMP = ' .·:-~=+*';
 const RING_SPEED = 13; // cells per second
 const RING_LIFE_S = 5;
+const MIN_GUTTER_CELLS = 8; // narrower than this, a ring in the gutter would barely show
+const EDGE_SHARE = 0.7; // share of rings placed in the side gutters when they exist
 const QUIET_AFTER_S = 300; // dim the field after this long with nothing on the air
 const QUIET_LEVEL = 0.55;
 
@@ -43,6 +45,8 @@ interface Ring {
   born: number; // seconds
   rgb: Rgb;
   label: string | null;
+  /** Longest label that fits where this ring was placed, in cells (edge rings sit in a narrow gutter). */
+  maxLabel: number;
   scrambled: boolean;
 }
 
@@ -169,6 +173,18 @@ export function AsciiBackdrop({ state, frozen = false, density = 'normal', accep
       ctx.fillText(g, col * CELL_W, row * CELL_H);
     };
 
+    /**
+     * The empty bands either side of the content on wide screens, in cells. Panels are opaque, so
+     * a ring centred behind them is mostly hidden; rings centred in a gutter stay visible.
+     */
+    const gutters = (): Array<{ from: number; to: number }> => {
+      const shell = document.querySelector('.app-shell')?.getBoundingClientRect();
+      if (!shell) return [];
+      const left = { from: 0, to: Math.floor(shell.left / CELL_W) };
+      const right = { from: Math.ceil(shell.right / CELL_W), to: cols };
+      return [left, right].filter((g) => g.to - g.from >= MIN_GUTTER_CELLS);
+    };
+
     /** Compare against the last poll: new key-ups spawn rings, cc hits spawn blips. */
     const observe = (t: number) => {
       const s = stateRef.current;
@@ -187,12 +203,25 @@ export function AsciiBackdrop({ state, frozen = false, density = 'normal', accep
         if (tg) lastActive = t;
         if (tg && tg !== prev && (acceptsRef.current?.(tg) ?? true)) {
           const enc = encrypted.has(key);
+          const edges = gutters();
+          // Most rings go to the side gutters when there are any; the rest still ping across the middle.
+          const onEdge = edges.length > 0 && hash(f.freq * 3, tg) < EDGE_SHARE;
+          let x = cols * (0.08 + lane * 0.84);
+          let y = rows * (0.22 + hash(f.freq, tg) * 0.5);
+          let maxLabel = 22;
+          if (onEdge) {
+            const g = edges[Math.floor(hash(tg, f.freq) * edges.length) % edges.length];
+            x = g.from + (g.to - g.from) * (0.3 + 0.4 * hash(f.freq, tg + 7));
+            y = rows * (0.06 + 0.88 * hash(tg, f.freq + 11));
+            maxLabel = Math.min(22, g.to - g.from - 2);
+          }
           const ring: Ring = {
-            x: cols * (0.08 + lane * 0.84),
-            y: rows * (0.22 + hash(f.freq, tg) * 0.5),
+            x,
+            y,
             born: t,
             rgb: enc ? [148, 163, 184] : hexToRgb(getTalkgroupColor(f.active_tag)),
-            label: enc ? null : (f.active_tag || `TG ${tg}`),
+            label: enc || maxLabel < 6 ? null : (f.active_tag || `TG ${tg}`),
+            maxLabel,
             scrambled: enc,
           };
           rings = [...rings.slice(-(densityRef.current.maxRings - 1)), ring];
@@ -285,7 +314,7 @@ export function AsciiBackdrop({ state, frozen = false, density = 'normal', accep
         }
         if (ring.label) {
           const life = 1 - age / RING_LIFE_S;
-          const text = ring.label.slice(0, 22);
+          const text = ring.label.slice(0, ring.maxLabel);
           const start = Math.round(ring.x - text.length / 2);
           for (let i = 0; i < text.length; i += 1) {
             put(text[i], start + i, Math.round(ring.y), Math.min(1, life * 1.6) * 0.75, ring.rgb);
