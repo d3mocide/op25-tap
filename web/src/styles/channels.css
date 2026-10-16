@@ -1,0 +1,83 @@
+/* Channel tiles: fixed size, fixed order. State changes colour, never geometry. */
+.chan-section { margin-bottom: 18px; }
+.chan-title { margin-bottom: 8px; }
+
+.chan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  gap: 10px;
+}
+
+.chan-tile {
+  --tile-accent: transparent;
+  height: 96px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+}
+.chan-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tile-accent) 14%, transparent), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.chan-live,
+.chan-control { --tile-accent: var(--tg, var(--accent-amber)); }
+.chan-control { --tile-accent: var(--accent-cyan); }
+.chan-live::before,
+.chan-control::before { opacity: 1; }
+.chan-live {
+  border-color: color-mix(in srgb, var(--tg, var(--accent-amber)) 55%, transparent);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--edge-hi), 0 0 20px -6px color-mix(in srgb, var(--tg, var(--accent-amber)) 45%, transparent);
+}
+.chan-control { border-color: rgb(0 229 255 / 0.3); }
+.chan-idle { opacity: 0.82; }
+
+.chan-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chan-freq { font-family: var(--font-display); font-size: 1.2rem; letter-spacing: 0.02em; color: var(--text-main); }
+
+/* Fixed-height line so the tile never resizes when its text changes */
+.chan-line {
+  height: 26px;
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.chan-tg { font-size: 0.98rem; font-weight: 700; color: var(--tg, var(--text-main)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-src { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-cyan); flex-shrink: 0; }
+.chan-note { font-size: 0.8rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-note-cc { color: var(--accent-cyan); }
+.chan-last-tg { color: var(--text-muted); }
+
+.chan-foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-dim); }
+.chan-foot strong { color: var(--text-muted); font-weight: 600; }
+.chan-foot .chan-now { color: var(--accent-amber); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot, .pulse-dot.transmitting { animation: none; }
+}
+
+/* Phone: one slim row per channel, in frequency order (no re-sorting on key-up) */
+.channel-row-freq { font-family: var(--font-display); font-size: 0.95rem; color: var(--text-main); flex-shrink: 0; }
+.channel-row.live { background: color-mix(in srgb, var(--tg, var(--accent-amber)) 8%, transparent); border-left-color: var(--tg, var(--accent-amber)); }
+.channel-row.control { border-left-color: var(--accent-cyan); }
+.channel-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.channel-row-tg { font-size: 0.82rem; font-weight: 700; color: var(--tg, var(--text-main)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channel-row-src { font-size: 0.7rem; flex-shrink: 0; }
+.channel-row-idle { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channel-row.control .channel-row-idle { color: var(--accent-cyan); }
+.channel-row-stats { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim); flex-shrink: 0; text-align: right; }
+.channel-row.live .channel-row-last { color: var(--accent-amber); }
+.channel-row-last { color: var(--text-muted); }
+.channel-row { border-left: 3px solid var(--border-button); }
+
+/* Follow mode: calls outside the pinned talkgroups recede */
+.chan-tile.dim, .channel-row.dim { opacity: 0.38; filter: saturate(0.4); }

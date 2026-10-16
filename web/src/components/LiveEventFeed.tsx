@@ -4,6 +4,11 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import type { EventItem } from '../types';
 import { formatSystemLabel, getSystemColor, getTalkgroupCategory, getTalkgroupColor } from '../utils/colors';
 import { formatTs } from '../utils/time';
+import { useFocus } from '../context/focus';
+import { useHoldWhileHovered } from '../hooks/useHoldWhileHovered';
+import { EntityLink, PinButton } from './EntityLink';
+
+const eventKey = (ev: EventItem) => ev.id;
 
 interface LiveEventFeedProps {
   events: EventItem[];
@@ -13,6 +18,7 @@ interface LiveEventFeedProps {
 export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical = false }) => {
   const [filter, setFilter] = useState('');
   const isMobile = useIsMobile();
+  const { matches } = useFocus();
 
   // Guarantee strict descending order (newest first) and deduplication
   const sortedEvents = useMemo(() => {
@@ -43,6 +49,7 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical
   }, [events]);
 
   const filtered = sortedEvents.filter((ev) => {
+    if (!matches(ev.to_tg ?? ev.to_tgid)) return false;
     if (!filter) return true;
     const q = filter.toLowerCase();
     const tgVal = ev.to_tg ?? ev.to_tgid;
@@ -65,145 +72,99 @@ export const LiveEventFeed: React.FC<LiveEventFeedProps> = ({ events, historical
     );
   });
 
-  const formatTime = (ts: number) => formatTs(ts);
+  const { shown, pending, hoverProps, flush, holding } = useHoldWhileHovered(filtered, eventKey);
 
   return (
-    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header bar styled like OP25 Call History bar */}
+    <div className="glass-panel panel-col">
       <div className="panel-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="panel-title">
           <Zap size={15} color="var(--accent-cyan)" />
-          <h2 style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0, color: 'var(--text-main)' }}>
-            {historical ? 'Call History' : 'Call History — Real-Time Stream'}
-          </h2>
-          <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{filtered.length}</span>
+          <h2>{historical ? 'Call History' : 'Call History — Real-Time Stream'}</h2>
+          <span className={`badge badge-muted mono badge-sm ${holding ? 'held' : ''}`} title={holding ? 'Paused while the pointer is over the list' : undefined}>{filtered.length}</span>
         </div>
 
-        <div className="panel-search" style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
-          <Search size={13} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+        <div className="panel-search">
+          <Search size={13} />
           <input
             type="text"
             className="input-search"
             placeholder="Filter calls..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            style={{ width: '100%', paddingLeft: '28px' }}
           />
         </div>
+          <div className="new-pill-slot">
+            {pending > 0 && (
+              <button type="button" className="new-pill" onClick={flush} {...hoverProps}>
+                {pending} new {pending === 1 ? 'call' : 'calls'}
+              </button>
+            )}
+          </div>
       </div>
 
-      {/* Events Table Container */}
-      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '520px' }}>
-        {filtered.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
-            No call events recorded yet. Waiting for live transmissions...
-          </div>
+      <div className="panel-scroll" {...hoverProps}>
+        {shown.length === 0 ? (
+          <div className="empty-note">No call events recorded yet. Waiting for live transmissions...</div>
         ) : isMobile ? (
-          <MobileCallList events={filtered} />
+          <MobileCallList events={shown} />
         ) : (
-          <table className="tactical-table">
+          <table className="tactical-table call-table">
             <thead>
               <tr>
-                <th style={{ width: '74px', whiteSpace: 'nowrap' }}>Time</th>
-                <th style={{ width: '84px', whiteSpace: 'nowrap' }}>Sys/Site</th>
-                <th style={{ width: '56px', textAlign: 'center', whiteSpace: 'nowrap' }}>Svc</th>
-                <th style={{ minWidth: '135px', whiteSpace: 'nowrap' }}>Talkgroup</th>
-                <th style={{ width: '92px', whiteSpace: 'nowrap' }}>Frequency</th>
-                <th style={{ width: '78px', whiteSpace: 'nowrap' }}>Source</th>
-                <th style={{ width: '56px', whiteSpace: 'nowrap' }}>Duration</th>
+                <th className="c-time">Time</th>
+                <th className="c-sys">Sys/Site</th>
+                <th className="c-svc">Svc</th>
+                <th className="c-tg">Talkgroup</th>
+                <th className="c-freq">Frequency</th>
+                <th className="c-src">Source</th>
+                <th className="c-dur">Duration</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((ev, idx) => {
+              {shown.map((ev, idx) => {
                 const tgNum = ev.to_tg ?? ev.to_tgid;
                 const tgName = ev.tg_tag ?? ev.tg_alias ?? (tgNum ? `TG ${tgNum}` : '—');
                 const fromNum = ev.from ?? ev.from_rid;
                 const freqNum = ev.freq ?? ev.frequency;
-                // 4 decimal places for clean readable frequencies e.g. 851.7250
                 const mhz = freqNum ? (freqNum / 1_000_000).toFixed(4) : '—';
                 const durSec = ev.duration_ms > 0 ? (ev.duration_ms / 1000).toFixed(1) + 's' : '< 1s';
-                const tgColor = getTalkgroupColor(tgName);
                 const rowKey = ev.id || `${ev.ts}-${idx}`;
                 const sysLabel = formatSystemLabel(ev.system);
-                const sysColor = getSystemColor(sysLabel);
-                const siteLabel = ev.site_str || ev.site || '1.26';
+                const siteLabel = ev.site_str || ev.site || '—';
                 const cat = getTalkgroupCategory(tgName, ev.tg_group, ev.category);
 
                 return (
                   <tr key={rowKey}>
-                    <td className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
-                      {formatTime(ev.ts)}
+                    <td className="cell-time">{formatTs(ev.ts)}</td>
+
+                    <td className="cell-mono nowrap call-sys" style={{ '--sys': getSystemColor(sysLabel) } as React.CSSProperties}>
+                      <span className="call-sys-label">{sysLabel}</span>
+                      <span className="call-sep">·</span>
+                      <span className="text-muted">{siteLabel}</span>
                     </td>
 
-                    <td className="mono" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: sysColor, fontWeight: 700 }}>{sysLabel}</span>
-                      <span style={{ color: 'var(--text-dim)', margin: '0 3px' }}>·</span>
-                      <span style={{ color: 'var(--text-muted)' }}>{siteLabel}</span>
-                    </td>
-
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <span
-                        className="mono"
-                        style={{
-                          display: 'inline-block',
-                          fontSize: '0.64rem',
-                          fontWeight: 800,
-                          color: cat.color,
-                          background: `${cat.color}18`,
-                          border: `1px solid ${cat.color}45`,
-                          padding: '1px 5px',
-                          borderRadius: '3px',
-                          letterSpacing: '0.04em',
-                        }}
-                        title={cat.fullLabel || cat.label}
-                      >
+                    <td className="col-center nowrap">
+                      <span className="cat-tag" style={{ '--cat': cat.color } as React.CSSProperties} title={cat.fullLabel || cat.label}>
                         {cat.label}
                       </span>
                     </td>
 
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <div style={{ fontWeight: 600, color: tgColor, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <span>{tgName}</span>
-                        {tgNum && (
-                          <span
-                            className="mono"
-                            style={{
-                              fontSize: '0.68rem',
-                              color: 'var(--text-dim)',
-                              fontWeight: 500,
-                              background: 'rgba(255, 255, 255, 0.06)',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                            }}
-                          >
-                            {tgNum}
-                          </span>
-                        )}
+                    <td className="nowrap">
+                      <div className="tg-line" style={{ '--tg': getTalkgroupColor(tgName) } as React.CSSProperties}>
+                        <EntityLink kind="tg" id={tgNum}>{tgName}</EntityLink>
+                        {tgNum && <span className="id-pill">{tgNum}</span>}
+                        <PinButton tgid={tgNum} />
                       </div>
                     </td>
 
-                    <td className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
-                      {mhz}
+                    <td className="cell-mono cell-sm nowrap">{mhz}</td>
+
+                    <td className="cell-mono nowrap">
+                      {fromNum ? <EntityLink kind="rid" id={fromNum} className="mono-cyan cell-sm">{fromNum}</EntityLink> : <span className="mono-dim cell-sm">—</span>}
+                      {ev.from_alias && <div className="mono-dim call-alias ellipsis">{ev.from_alias}</div>}
                     </td>
 
-                    <td className="mono" style={{ whiteSpace: 'nowrap' }}>
-                      {fromNum ? (
-                        <span style={{ color: 'var(--accent-cyan)', fontWeight: 700, fontSize: '0.78rem' }}>
-                          {fromNum}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>—</span>
-                      )}
-                      {ev.from_alias && (
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {ev.from_alias}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="mono" style={{ fontSize: '0.76rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                      {durSec}
-                    </td>
+                    <td className="cell-mono cell-sm text-dim nowrap">{durSec}</td>
                   </tr>
                 );
               })}
@@ -226,41 +187,21 @@ const MobileCallList: React.FC<{ events: EventItem[] }> = ({ events }) => (
       const mhz = freqNum ? (freqNum / 1_000_000).toFixed(4) : null;
       const durSec = ev.duration_ms > 0 ? (ev.duration_ms / 1000).toFixed(1) + 's' : '< 1s';
       const sysLabel = formatSystemLabel(ev.system);
-      const siteLabel = ev.site_str || ev.site || '1.26';
+      const siteLabel = ev.site_str || ev.site || '—';
       const cat = getTalkgroupCategory(tgName, ev.tg_group, ev.category);
 
       return (
         <div key={ev.id || `${ev.ts}-${idx}`} className="call-row">
           <div className="call-row-line">
-            <span
-              className="mono"
-              style={{
-                fontSize: '0.62rem',
-                fontWeight: 800,
-                color: cat.color,
-                background: `${cat.color}18`,
-                border: `1px solid ${cat.color}45`,
-                padding: '0 4px',
-                borderRadius: '3px',
-                flexShrink: 0,
-              }}
-            >
-              {cat.label}
-            </span>
-            <span className="call-row-tg" style={{ color: getTalkgroupColor(tgName) }}>{tgName}</span>
-            {tgNum && <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-dim)', flexShrink: 0 }}>{tgNum}</span>}
-            <span className="mono" style={{ marginLeft: 'auto', fontSize: '0.74rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-              {formatTs(ev.ts)}
-            </span>
+            <span className="cat-tag" style={{ '--cat': cat.color } as React.CSSProperties}>{cat.label}</span>
+            <EntityLink kind="tg" id={tgNum} className="call-row-tg"><span style={{ color: getTalkgroupColor(tgName) }}>{tgName}</span></EntityLink>
+            {tgNum && <span className="mono-dim call-row-id">{tgNum}</span>}
+            <span className="call-row-time">{formatTs(ev.ts)}</span>
           </div>
-          <div className="call-row-line mono" style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-            {fromNum ? (
-              <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>{fromNum}</span>
-            ) : (
-              <span>—</span>
-            )}
+          <div className="call-row-line mono call-row-sub">
+            {fromNum ? <EntityLink kind="rid" id={fromNum} className="mono-cyan">{fromNum}</EntityLink> : <span>—</span>}
             {ev.from_alias && <span className="call-row-alias">{ev.from_alias}</span>}
-            <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <span className="call-row-tail">
               {mhz && <>{mhz} · </>}
               <span style={{ color: getSystemColor(sysLabel) }}>{sysLabel}</span> {siteLabel} · {durSec}
             </span>

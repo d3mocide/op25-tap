@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Maximize2, X, BarChart2, Moon, Sun } from 'lucide-react';
 import type { TelemetryStatus } from '../types';
+import '../styles/plots.css';
 
 interface PlotsViewProps {
   telemetry: TelemetryStatus;
@@ -79,21 +80,7 @@ const ScopeImage: React.FC<{
     };
   }, [url]);
 
-  return (
-    <img
-      src={displayedSrc}
-      alt={alt}
-      style={{
-        width: '100%',
-        height: 'auto',
-        maxHeight: '340px',
-        objectFit: 'contain',
-        display: 'block',
-        filter: isDark ? 'invert(1) contrast(1.08)' : 'none',
-        transition: 'filter 0.2s ease',
-      }}
-    />
-  );
+  return <img src={displayedSrc} alt={alt} className={`scope-img ${isDark ? 'phosphor' : ''}`} />;
 };
 
 export const PlotsView: React.FC<PlotsViewProps> = ({ telemetry }) => {
@@ -126,190 +113,95 @@ export const PlotsView: React.FC<PlotsViewProps> = ({ telemetry }) => {
   return (
     <div>
       {/* Scope Controls Header */}
-      <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '4px',
-              background: 'linear-gradient(180deg, #282a32 0%, #17181f 100%)',
-              border: '1px solid #3c3e4a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-cyan)'
-            }}>
-              <Activity size={18} />
-            </div>
+      <div className="glass-panel panel-pad scope-bar">
+        <div className="scope-bar-row">
+          <div className="row scope-bar-id">
+            <div className="icon-tile"><Activity size={18} /></div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '0.04em' }}>
-                  RF SIGNAL ANALYSIS & SCOPES
-                </span>
-                <span className="badge badge-cyan" style={{ fontSize: '0.68rem' }}>
+              <div className="row-wrap">
+                <span className="scope-bar-title">RF SIGNAL ANALYSIS & SCOPES</span>
+                <span className="badge badge-cyan badge-sm">
                   CH {selectedChannel}: {channelLabel} {ccMHz ? `(${ccMHz} MHz)` : ''}
                 </span>
               </div>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              <div className="scope-bar-sub">
                 Live GNU Radio signal oscilloscopes & baseband analyzers · {activeCount} of 6 active
               </div>
             </div>
           </div>
 
-          {/* Quick Controls: Dark Mode Toggle & Plot Toggles */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            
-            {/* Dark Mode Phosphor Toggle */}
+          <div className="row-wrap">
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className={`btn ${isDarkMode ? 'btn-primary' : ''}`}
-              style={{
-                padding: '5px 10px',
-                fontSize: '0.72rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                background: isDarkMode ? 'rgba(56, 189, 248, 0.15)' : undefined,
-                border: isDarkMode ? '1px solid var(--accent-cyan)' : undefined
-              }}
+              className={`btn scope-btn ${isDarkMode ? 'btn-primary' : ''}`}
               title="Toggle Dark Oscilloscope / Light Mode"
             >
               {isDarkMode ? <Moon size={13} color="var(--accent-cyan)" /> : <Sun size={13} />}
               <span>{isDarkMode ? 'DARK PHOSPHOR' : 'LIGHT SCOPE'}</span>
             </button>
 
-            <div style={{ width: '1px', height: '20px', background: 'var(--border-subtle)', margin: '0 4px' }} />
+            <div className="scope-divider" />
 
-            {/* Scope Toggles */}
             {PLOT_DEFINITIONS.map((p) => {
               const isActive = Boolean(activePlotsMap[p.kind]);
-              const isToggling = togglingPlotId === p.id;
-
               return (
                 <button
                   key={p.id}
                   onClick={() => handleTogglePlot(p.id)}
-                  disabled={isToggling}
-                  className={`btn ${isActive ? 'btn-primary' : ''}`}
-                  style={{
-                    padding: '5px 10px',
-                    fontSize: '0.72rem',
-                    opacity: isToggling ? 0.6 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
+                  disabled={togglingPlotId === p.id}
+                  className={`btn scope-btn ${isActive ? 'btn-primary' : ''}`}
                   title={`Click to toggle ${p.name}`}
                 >
-                  <span style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    background: isActive ? 'var(--accent-emerald)' : 'var(--text-dim)',
-                    display: 'inline-block'
-                  }} />
+                  <span className={`scope-led ${isActive ? 'on' : ''}`} />
                   <span>{p.name.split(' ')[0]}</span>
                 </button>
               );
             })}
           </div>
-
         </div>
       </div>
 
       {/* 2x3 Grid of Scopes */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
-        gap: '14px',
-        marginBottom: '16px'
-      }}>
+      <div className="scope-grid">
         {PLOT_DEFINITIONS.map((def) => {
           const plotItem = activePlotsMap[def.kind];
           const isActive = Boolean(plotItem);
+          const zoom = () => plotItem && setZoomedPlot({ name: def.name, url: plotItem.url, description: def.description });
 
           return (
-            <div key={def.id} className="glass-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              
-              {/* Card Header */}
-              <div className="table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div key={def.id} className="glass-panel scope-card panel-clip">
+              <div className="panel-header scope-card-head">
+                <div className="row">
                   <BarChart2 size={15} color={isActive ? 'var(--accent-cyan)' : 'var(--text-dim)'} />
-                  <span style={{ fontWeight: 700, fontSize: '0.80rem', color: '#ffffff' }}>
-                    {def.name}
-                  </span>
-                  <span className="badge" style={{
-                    fontSize: '0.62rem',
-                    padding: '1px 6px',
-                    background: isActive ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                    color: isActive ? 'var(--accent-cyan)' : 'var(--text-dim)',
-                    border: `1px solid ${isActive ? 'rgba(56, 189, 248, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`
-                  }}>
-                    {def.badge}
-                  </span>
+                  <span className="scope-card-name">{def.name}</span>
+                  <span className={`scope-tag ${isActive ? 'on' : ''}`}>{def.badge}</span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="row">
+                  {plotItem && <span className="mono-dim scope-seq">#{plotItem.seq}</span>}
                   {plotItem && (
-                    <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>
-                      #{plotItem.seq}
-                    </span>
-                  )}
-                  {plotItem && (
-                    <button
-                      onClick={() => setZoomedPlot({ name: def.name, url: plotItem.url, description: def.description })}
-                      className="btn"
-                      style={{ padding: '3px 6px', fontSize: '0.68rem' }}
-                      title="Inspect full resolution"
-                    >
+                    <button onClick={zoom} className="btn scope-zoom" title="Inspect full resolution">
                       <Maximize2 size={12} />
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Scope Display Body */}
-              <div style={{
-                background: '#07080a',
-                position: 'relative',
-                minHeight: '270px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderTop: '1px solid #1c1d24',
-                borderBottom: '1px solid #1c1d24',
-                cursor: isActive ? 'pointer' : 'default',
-              }}
-              onClick={() => {
-                if (plotItem) {
-                  setZoomedPlot({ name: def.name, url: plotItem.url, description: def.description });
-                }
-              }}
-              >
+              <div className={`scope-screen ${isActive ? 'live' : ''}`} onClick={zoom}>
                 {isActive ? (
-                  <ScopeImage
-                    url={plotItem.url}
-                    alt={def.name}
-                    isDark={isDarkMode}
-                  />
+                  <ScopeImage url={plotItem.url} alt={def.name} isDark={isDarkMode} />
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-dim)' }}>
-                    <Activity size={32} style={{ opacity: 0.2, margin: '0 auto 10px auto' }} />
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                      Scope Feed Inactive
-                    </div>
-                    <div style={{ fontSize: '0.72rem', marginTop: '4px', maxWidth: '240px' }}>
-                      Click <strong>{def.name.split(' ')[0]}</strong> toggle in top bar to activate feed.
+                  <div className="scope-offline">
+                    <div className="scope-offline-title">SCOPE OFFLINE</div>
+                    <div className="scope-offline-sub">
+                      Click <strong>{def.name.split(' ')[0]}</strong> in the top bar to activate this feed.
                     </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleTogglePlot(def.id);
                       }}
-                      className="btn"
-                      style={{ marginTop: '12px', fontSize: '0.72rem', padding: '4px 10px' }}
+                      className="btn scope-activate"
                     >
                       Activate Scope
                     </button>
@@ -317,11 +209,7 @@ export const PlotsView: React.FC<PlotsViewProps> = ({ telemetry }) => {
                 )}
               </div>
 
-              {/* Card Footer Technical Annotation */}
-              <div style={{ padding: '8px 14px', fontSize: '0.71rem', color: 'var(--text-dim)', background: '#0b0c10' }}>
-                {def.description}
-              </div>
-
+              <div className="scope-card-note">{def.description}</div>
             </div>
           );
         })}
@@ -329,71 +217,25 @@ export const PlotsView: React.FC<PlotsViewProps> = ({ telemetry }) => {
 
       {/* Lightbox / Zoom Modal */}
       {zoomedPlot && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(5, 6, 8, 0.92)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px'
-        }}
-        onClick={() => setZoomedPlot(null)}
-        >
-          <div
-            className="glass-panel"
-            style={{
-              maxWidth: '960px',
-              width: '100%',
-              overflow: 'hidden',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="scope-lightbox" onClick={() => setZoomedPlot(null)}>
+          <div className="glass-panel scope-modal panel-clip" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-header">
+              <div className="row">
                 <Activity size={18} color="var(--accent-cyan)" />
-                <span style={{ fontWeight: 800, fontSize: '0.94rem', color: '#ffffff' }}>
-                  {zoomedPlot.name}
-                </span>
+                <span className="scope-modal-title">{zoomedPlot.name}</span>
               </div>
-              <button
-                onClick={() => setZoomedPlot(null)}
-                className="btn"
-                style={{ padding: '4px 8px' }}
-                title="Close"
-              >
+              <button onClick={() => setZoomedPlot(null)} className="btn scope-zoom" title="Close">
                 <X size={15} />
               </button>
             </div>
 
-            <div style={{ background: '#000000', padding: '12px', textAlign: 'center' }}>
-              <img
-                src={zoomedPlot.url}
-                alt={zoomedPlot.name}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '72vh',
-                  objectFit: 'contain',
-                  filter: isDarkMode ? 'invert(1) contrast(1.08)' : 'none',
-                }}
-              />
+            <div className="scope-modal-body">
+              <img src={zoomedPlot.url} alt={zoomedPlot.name} className={`scope-modal-img ${isDarkMode ? 'phosphor' : ''}`} />
             </div>
 
-            <div style={{ padding: '12px 18px', background: '#0b0c10', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                {zoomedPlot.description}
-              </div>
-              <button
-                onClick={() => setZoomedPlot(null)}
-                className="btn btn-primary"
-                style={{ padding: '6px 14px', fontSize: '0.76rem' }}
-              >
+            <div className="scope-modal-foot">
+              <div className="text-muted">{zoomedPlot.description}</div>
+              <button onClick={() => setZoomedPlot(null)} className="btn btn-primary">
                 Close Scope
               </button>
             </div>

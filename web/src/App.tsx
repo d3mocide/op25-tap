@@ -6,10 +6,21 @@ import {
   Clock,
   Network,
   Radio,
+  History,
+  Keyboard,
   RefreshCw,
+  Star,
   TrendingUp,
   Users,
+  Waves,
 } from 'lucide-react';
+import { AsciiBackdrop, BACKDROP_MODES, readBackdropMode, saveBackdropMode } from './components/AsciiBackdrop';
+import type { BackdropMode } from './components/AsciiBackdrop';
+import { EntityDrawer } from './components/EntityDrawer';
+import { NowTalking } from './components/NowTalking';
+import { ShortcutHelp } from './components/ShortcutHelp';
+import { Toasts } from './components/Toasts';
+import { FocusProvider, useFocus } from './context/focus';
 import { AnomaliesPanel } from './components/AnomaliesPanel';
 import { BarTimeline } from './components/BarTimeline';
 import { CallTranscriptsFeed } from './components/CallTranscriptsFeed';
@@ -26,7 +37,7 @@ import { useHistoryData } from './hooks/useHistoryData';
 import { useLiveTelemetry } from './hooks/useLiveTelemetry';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useTimeRange } from './hooks/useTimeRange';
-import type { StorageStats } from './types';
+import type { EventItem, StorageStats } from './types';
 import { formatBytes, formatTs } from './utils/time';
 
 type ActiveTab = 'monitor' | 'trends' | 'plots' | 'subscribers' | 'talkgroups' | 'topology' | 'anomalies';
@@ -34,7 +45,19 @@ type ActiveTab = 'monitor' | 'trends' | 'plots' | 'subscribers' | 'talkgroups' |
 // Tabs that only make sense against the live receiver.
 const LIVE_ONLY: ActiveTab[] = ['plots', 'topology'];
 
+const TAB_KEYS: ActiveTab[] = ['monitor', 'trends', 'plots', 'subscribers', 'talkgroups', 'topology', 'anomalies'];
+const MODE_LABEL: Record<BackdropMode, string> = { off: 'Off', subtle: 'Subtle', normal: 'Normal', lively: 'Lively' };
+
 export function App() {
+  return (
+    <FocusProvider>
+      <AppInner />
+    </FocusProvider>
+  );
+}
+
+function AppInner() {
+  const { matches, follow, setFollow, pins, entity, close } = useFocus();
   const live = useLiveTelemetry();
   const { telemetry, wsConnected, refreshData } = live;
   const { range, setRange } = useTimeRange();
@@ -51,6 +74,8 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('monitor');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [storage, setStorage] = useState<StorageStats | null>(null);
+  const [backdropMode, setBackdropMode] = useState<BackdropMode>(readBackdropMode);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     const load = () =>
@@ -65,6 +90,58 @@ export function App() {
 
   const tab = isHistory && LIVE_ONLY.includes(activeTab) ? 'monitor' : activeTab;
   const timelineCalls = history.timeline?.buckets.reduce((n, b) => n + b.calls, 0) ?? 0;
+
+  const cycleBackdrop = () => {
+    setBackdropMode((m) => {
+      const next = BACKDROP_MODES[(BACKDROP_MODES.indexOf(m) + 1) % BACKDROP_MODES.length];
+      saveBackdropMode(next);
+      return next;
+    });
+  };
+
+  const goLive = () => setRange(null);
+  const goHistory = () => {
+    const now = Math.floor(Date.now() / 1000);
+    if (!isHistory) setRange({ from: now - 86400, to: now });
+  };
+
+  /** Show a call in History with five minutes of context either side. */
+  const jumpToCall = (ev: EventItem) => {
+    setRange({ from: Math.floor(ev.ts - 300), to: Math.ceil(ev.ts + 300) });
+    setActiveTab('monitor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Keyboard shortcuts (ignored while typing or with a modifier held).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      const k = e.key.toLowerCase();
+      const n = Number(k);
+      if (n >= 1 && n <= TAB_KEYS.length) {
+        const target = TAB_KEYS[n - 1];
+        if (!(isHistory && LIVE_ONLY.includes(target))) selectTab(target);
+      } else if (k === 'l') goLive();
+      else if (k === 'h') goHistory();
+      else if (k === 'f') setFollow(!follow);
+      else if (k === 'a') cycleBackdrop();
+      else if (k === '?') setHelpOpen((o) => !o);
+      else if (k === ' ') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('op25:toggle-audio'));
+      } else if (k === '/') {
+        const box = Array.from(document.querySelectorAll<HTMLInputElement>('.input-search')).find((i) => i.offsetParent !== null);
+        if (box) {
+          e.preventDefault();
+          box.focus();
+        }
+      } else if (k === 'escape' && entity) close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -86,10 +163,9 @@ export function App() {
           selectTab(id);
           e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }}
-        className={`btn tab-btn ${tab === id ? 'btn-active' : ''}`}
+        className={`btn tab-btn ${tab === id ? 'btn-active' : ''} ${disabled ? 'is-disabled' : ''}`}
         disabled={disabled}
         title={disabled ? 'Live only: switch to Live to view' : undefined}
-        style={disabled ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
       >
         {icon}
         <span>{label}</span>
@@ -100,17 +176,49 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {backdropMode !== 'off' && (
+        <AsciiBackdrop
+          frozen={isHistory}
+          density={backdropMode}
+          accepts={matches}
+          state={{
+            frequencies: telemetry.frequencies,
+            channels: telemetry.channels,
+            errorHz: telemetry.error_hz,
+            connected: telemetry.connected && wsConnected,
+          }}
+        />
+      )}
       {/* Top Telemetry Header */}
       <Header telemetry={telemetry} wsConnected={wsConnected} />
 
-      {/* Live / History + range: scopes every panel below */}
-      <TimeRangeBar range={range} onChange={setRange} historyStart={storage?.history_start_ts ?? null} />
+      {!isHistory && !(telemetry.connected && wsConnected) && (
+        <div className="offline-banner" role="status">
+          <strong>{wsConnected ? 'RECEIVER OFFLINE' : 'RECONNECTING'}</strong>
+          <span>
+            {telemetry.last_poll
+              ? `Showing the last data received ${formatAgo(telemetry.last_poll)}.`
+              : 'Waiting for the first update from OP25.'}
+          </span>
+        </div>
+      )}
+
+      {/* Who is on the air right now, on every tab */}
+      {!isHistory && <NowTalking frequencies={telemetry.frequencies} channels={telemetry.channels} />}
 
       {/* Navigation Bar (sticky, horizontally scrollable strip on phones) */}
       <nav className="app-nav">
+        <div className="segmented nav-mode" role="group" aria-label="Data mode">
+          <button className={!isHistory ? 'on' : ''} onClick={goLive} aria-pressed={!isHistory} title="Live (L)">
+            <Radio size={13} /> Live
+          </button>
+          <button className={isHistory ? 'on' : ''} onClick={goHistory} aria-pressed={isHistory} title="History (H)">
+            <History size={13} /> History
+          </button>
+        </div>
         <div className="app-tabs">
           {tabButton('monitor', isHistory ? <Clock size={15} /> : <Activity size={15} />,
-            isHistory ? (isMobile ? 'History' : 'Call History') : (isMobile ? 'Monitor' : 'Live Monitor'))}
+            isHistory ? 'History' : 'Monitor')}
           {tabButton('trends', <TrendingUp size={15} />, 'Trends')}
           {tabButton('plots', <BarChart2 size={15} />, isMobile ? 'Scopes' : 'RF Scopes',
             <span className="tab-badge">{telemetry.plot_files?.length || 0}</span>)}
@@ -124,6 +232,34 @@ export function App() {
             <span className={`tab-badge ${anomalies.length > 0 ? 'tab-badge-rose' : ''}`}>{anomalies.length}</span>)}
         </div>
 
+        <div className="app-nav-actions">
+        <button
+          onClick={() => setFollow(!follow)}
+          disabled={pins.size === 0}
+          className={`btn app-refresh ${follow && pins.size > 0 ? 'btn-active' : ''}`}
+          title={pins.size === 0 ? 'Pin talkgroups with the star, then follow them here (F)' : 'Show only pinned talkgroups (F)'}
+          aria-pressed={follow}
+          aria-label="Follow pinned talkgroups"
+        >
+          <Star size={14} fill={follow && pins.size > 0 ? 'currentColor' : 'none'} />
+          {pins.size > 0 && <span>{pins.size}</span>}
+        </button>
+
+        <button
+          onClick={cycleBackdrop}
+          className={`btn app-refresh ${backdropMode !== 'off' ? 'btn-active' : ''}`}
+          title={`Airwaves backdrop: ${MODE_LABEL[backdropMode]} (click or press A to change)`}
+          aria-label={`Airwaves backdrop: ${MODE_LABEL[backdropMode]}`}
+        >
+          <Waves size={14} />
+          <span className="lbl">Airwaves</span>
+          <span className="mode-pips" aria-hidden="true">
+            {[1, 2, 3].map((n) => (
+              <i key={n} className={BACKDROP_MODES.indexOf(backdropMode) >= n ? 'on' : ''} />
+            ))}
+          </span>
+        </button>
+
         {!isHistory && (
           <button
             onClick={handleManualRefresh}
@@ -132,26 +268,25 @@ export function App() {
             aria-label="Refresh"
           >
             <RefreshCw size={14} className={isRefreshing ? 'pulse-dot' : ''} />
-            {!isMobile && <span>Refresh</span>}
           </button>
         )}
+        </div>
       </nav>
 
+      <TimeRangeBar range={range} onChange={setRange} historyStart={storage?.history_start_ts ?? null} />
+
       {/* Main Tab Views */}
-      <main
-        className={isHistory && history.loading ? 'is-refetching' : ''}
-        style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-      >
+      <main className={`app-main ${isHistory && history.loading ? 'is-refetching' : ''}`}>
         {tab === 'monitor' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="stack">
             {isHistory ? (
-              <div className="glass-panel" style={{ padding: '12px 16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: isMobile ? 28 : 36 }}>
+              <div className="glass-panel panel-pad">
+                <div className="chart-head">
                   <span className="stat-label">
-                    Activity · <span className="mono" style={{ color: 'var(--text-main)' }}>{timelineCalls.toLocaleString()}</span> calls
+                    Activity · <span className="mono text-main">{timelineCalls.toLocaleString()}</span> calls
                   </span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                    {isMobile ? 'Drag to zoom · tap a bar to drill in' : 'Drag to zoom · click a bar to drill in · browser Back to zoom out'} · <span style={{ color: 'var(--accent-amber)' }}>▬</span> alerts
+                  <span className="chart-hint">
+                    {isMobile ? 'Drag to zoom · tap a bar to drill in' : 'Drag to zoom · click a bar to drill in · browser Back to zoom out'} · <span className="text-amber">▬</span> alerts
                   </span>
                 </div>
                 {history.timeline && (
@@ -169,8 +304,8 @@ export function App() {
             )}
 
             {/* Split View: Event Feed & Subscribers */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(480px, 100%), 1fr))', gap: '16px' }}>
-              <div className="split-pane" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="split-grid">
+              <div className="split-pane stack-tight">
                 <LiveEventFeed events={events} historical={isHistory} />
                 {isHistory && history.hasMore && (
                   <button className="btn" onClick={history.loadMore} disabled={history.loading}>
@@ -185,7 +320,7 @@ export function App() {
 
             {/* Dedicated Full-Width Audio Intercepts & Transcriptions Feed */}
             <div>
-              <CallTranscriptsFeed events={events} historical={isHistory} />
+              <CallTranscriptsFeed events={events} historical={isHistory} onJumpToCall={isHistory ? undefined : jumpToCall} />
             </div>
           </div>
         )}
@@ -200,64 +335,68 @@ export function App() {
         )}
 
         {tab === 'plots' && (
-          <div style={{ flex: 1 }}>
-            <PlotsView telemetry={telemetry} />
-          </div>
+          <div className="grow"><PlotsView telemetry={telemetry} /></div>
         )}
 
         {tab === 'subscribers' && (
-          <div style={{ flex: 1 }}>
-            <SubscribersTable affiliations={affiliations} />
-          </div>
+          <div className="grow"><SubscribersTable affiliations={affiliations} /></div>
         )}
 
         {tab === 'talkgroups' && (
-          <div style={{ flex: 1 }}>
-            <TalkgroupDirectory talkgroups={talkgroups} />
-          </div>
+          <div className="grow"><TalkgroupDirectory talkgroups={talkgroups} /></div>
         )}
 
         {tab === 'topology' && (
-          <div style={{ flex: 1 }}>
-            <TopologyView telemetry={telemetry} />
-          </div>
+          <div className="grow"><TopologyView telemetry={telemetry} /></div>
         )}
 
         {tab === 'anomalies' && (
-          <div style={{ flex: 1 }}>
-            <AnomaliesPanel anomalies={anomalies} />
-          </div>
+          <div className="grow"><AnomaliesPanel anomalies={anomalies} /></div>
         )}
       </main>
 
       {/* Footer Status Bar */}
       <footer className="app-footer">
         <div className="app-footer-group">
-          <span>Protocol: <strong style={{ color: 'var(--text-muted)' }}>APCO-25 Phase 1 / 2</strong></span>
-          <span>Target: <strong className="mono" style={{ color: 'var(--text-muted)' }}>{telemetry.target_url ? telemetry.target_url.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Connected'}</strong></span>
+          <span>Protocol: <strong>APCO-25 Phase 1 / 2</strong></span>
+          <span>Target: <strong className="mono">{telemetry.target_url ? telemetry.target_url.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Connected'}</strong></span>
           <span className="footer-sep">|</span>
-          <span>Inspired by <a href="https://github.com/colonelpanichacks/trunk-tap" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>trunk-tap</a></span>
+          <span>Inspired by <a href="https://github.com/colonelpanichacks/trunk-tap" target="_blank" rel="noreferrer">trunk-tap</a></span>
           <span className="footer-sep">|</span>
-          <span>Engine: <a href="https://github.com/boatbod/op25" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>boatbod/op25</a></span>
+          <span>Engine: <a href="https://github.com/boatbod/op25" target="_blank" rel="noreferrer">boatbod/op25</a></span>
         </div>
         <div className="app-footer-group">
           {storage && (
             <span
               title={`Raw history is kept ${storage.retention_days > 0 ? `${storage.retention_days} days` : 'forever'}; call audio ${storage.audio_retention_hours} hours; daily trends indefinitely.`}
             >
-              Storage: <strong className="mono" style={{ color: 'var(--text-muted)' }}>DB {formatBytes(storage.db_bytes)}</strong>
+              Storage: <strong className="mono">DB {formatBytes(storage.db_bytes)}</strong>
               {' · '}
-              <strong className="mono" style={{ color: 'var(--text-muted)' }}>Audio {formatBytes(storage.audio_bytes)}</strong>
+              <strong className="mono">Audio {formatBytes(storage.audio_bytes)}</strong>
               {' · '}
-              Retention <strong style={{ color: 'var(--text-muted)' }}>{storage.retention_days > 0 ? `${storage.retention_days}d` : 'off'}</strong>
+              Retention <strong>{storage.retention_days > 0 ? `${storage.retention_days}d` : 'off'}</strong>
             </span>
           )}
-          <span>WebSocket Stream: <strong style={{ color: wsConnected ? 'var(--accent-emerald)' : 'var(--accent-fire)' }}>{wsConnected ? 'Connected' : 'Reconnecting...'}</strong></span>
+          <span>WebSocket Stream: <strong className={wsConnected ? 'ws-ok' : 'ws-bad'}>{wsConnected ? 'Connected' : 'Reconnecting...'}</strong></span>
+          <button type="button" className="footer-keys" onClick={() => setHelpOpen(true)} title="Keyboard shortcuts (?)">
+            <Keyboard size={12} /> Shortcuts
+          </button>
           <span>op25-tap v0.3.0</span>
         </div>
       </footer>
+
+      <Toasts anomalies={anomalies} enabled={!isHistory} onOpen={() => selectTab('anomalies')} />
+      <EntityDrawer affiliations={affiliations} />
+      {helpOpen && <ShortcutHelp onClose={() => setHelpOpen(false)} />}
     </div>
   );
+}
+
+function formatAgo(ts: number): string {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
 }
 
 export default App;

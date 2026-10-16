@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { formatDuration } from '../utils/time';
 
 export interface BarBucket {
@@ -41,6 +41,7 @@ export const BarTimeline: React.FC<BarTimelineProps> = ({
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
+  const gid = useId();
   const [hover, setHover] = useState<number | null>(null);
   const [drag, setDrag] = useState<{ a: number; b: number } | null>(null);
 
@@ -102,18 +103,24 @@ export const BarTimeline: React.FC<BarTimelineProps> = ({
   const sel = drag ? { lo: Math.min(drag.a, drag.b), hi: Math.max(drag.a, drag.b) } : null;
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', userSelect: 'none' }}>
+    <div ref={wrapRef} className="bar-timeline">
       <svg
         width={width}
         height={height}
         role="img"
         aria-label="Calls over time"
-        style={{ display: 'block', cursor: onSelect ? 'crosshair' : 'default', touchAction: 'pan-y' }}
+        className={onSelect ? 'bar-svg selectable' : 'bar-svg'}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={() => { setHover(null); }}
       >
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity={0.95} />
+            <stop offset="100%" stopColor="var(--accent-cyan)" stopOpacity={0.25} />
+          </linearGradient>
+        </defs>
         {/* Recessive grid: baseline + max */}
         <line x1={PAD_L} x2={width - PAD_R} y1={y(0)} y2={y(0)} stroke="var(--border-button)" />
         <line x1={PAD_L} x2={width - PAD_R} y1={y(maxCalls)} y2={y(maxCalls)} stroke="var(--border-subtle)" strokeDasharray="2 3" />
@@ -141,8 +148,8 @@ export const BarTimeline: React.FC<BarTimelineProps> = ({
                 // Rounded data-end, square at the baseline.
                 <path
                   d={`M${x},${y(0)} V${y(b.calls) + r} Q${x},${y(b.calls)} ${x + r},${y(b.calls)} H${x + barW - r} Q${x + barW},${y(b.calls)} ${x + barW},${y(b.calls) + r} V${y(0)} Z`}
-                  fill="var(--accent-cyan)"
-                  opacity={hover === null || hover === i ? 0.85 : 0.45}
+                  fill={`url(#${gid})`}
+                  opacity={hover === null || hover === i ? 1 : 0.5}
                 />
               )}
               {b.anomalies > 0 && (
@@ -173,19 +180,15 @@ export const BarTimeline: React.FC<BarTimelineProps> = ({
 
       {hb && !drag && (
         <div
-          className="chart-tooltip"
-          style={{
-            left: Math.min(width - 170, Math.max(0, PAD_L + (hover ?? 0) * slot - 60)),
-            top: -8,
-            transform: 'translateY(-100%)',
-          }}
+          className="chart-tooltip bar-tip"
+          style={{ left: Math.min(width - 170, Math.max(0, PAD_L + (hover ?? 0) * slot - 60)) }}
         >
-          <div style={{ marginBottom: 2 }}>{formatBucket(hb)}</div>
+          <div className="bar-tip-title">{formatBucket(hb)}</div>
           <div><strong>{hb.calls.toLocaleString()}</strong> calls · <strong>{formatDuration(hb.airtime_ms)}</strong></div>
           {hb.anomalies > 0 && (
-            <div><strong style={{ color: 'var(--accent-amber)' }}>{hb.anomalies}</strong> alerts</div>
+            <div><strong className="bar-tip-alerts">{hb.anomalies}</strong> alerts</div>
           )}
-          {selectHint && <div style={{ color: 'var(--text-dim)', marginTop: 2 }}>{selectHint}</div>}
+          {selectHint && <div className="bar-tip-hint">{selectHint}</div>}
         </div>
       )}
     </div>

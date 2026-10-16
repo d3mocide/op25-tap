@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Lock, Radio, Search, Shield } from 'lucide-react';
 import type { Talkgroup } from '../types';
+import { getTalkgroupCategory } from '../utils/colors';
 import { formatTs } from '../utils/time';
+import { useFocus } from '../context/focus';
+import { EntityLink, PinButton } from './EntityLink';
 
 interface TalkgroupDirectoryProps {
   talkgroups: Talkgroup[];
 }
 
 export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgroups }) => {
+  const { pins } = useFocus();
   const [filter, setFilter] = useState('');
 
   const filtered = talkgroups.filter((tg) => {
@@ -20,98 +24,88 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
     );
   });
 
+  // Pinned talkgroups float to the top, otherwise the server's order stands.
+  const ordered = [...filtered].sort((a, b) => Number(pins.has(b.tgid)) - Number(pins.has(a.tgid)));
+
   const formatAirtime = (ms: number) => {
     if (!ms) return '0s';
     const sec = Math.floor(ms / 1000);
     if (sec < 60) return `${sec}s`;
     const min = Math.floor(sec / 60);
-    const remSec = sec % 60;
-    return `${min}m ${remSec}s`;
+    if (min < 60) return `${min}m ${sec % 60}s`;
+    return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
   };
 
   const formatLastSeen = (ts: number) => formatTs(ts, false);
 
   return (
-    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header & Filter */}
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        flexWrap: 'wrap'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="glass-panel panel-col">
+      <div className="panel-header">
+        <div className="panel-title">
           <Radio size={16} color="var(--accent-purple)" />
-          <h2 style={{ fontSize: '0.86rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, color: 'var(--text-dim)' }}>
-            Talkgroups Directory
-          </h2>
-          <span className="badge badge-muted mono" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>{filtered.length}</span>
+          <h2>Talkgroups Directory</h2>
+          <span className="badge badge-muted mono badge-sm">{filtered.length}</span>
         </div>
 
-        <div className="panel-search" style={{ position: 'relative', minWidth: '180px', marginLeft: 'auto' }}>
-          <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+        <div className="panel-search">
+          <Search size={14} />
           <input
             type="text"
             className="input-search"
             placeholder="Search talkgroups..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            style={{ width: '100%', paddingLeft: '30px' }}
           />
         </div>
       </div>
 
-      {/* Table Container */}
-      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '550px' }}>
+      <div className="panel-scroll tall">
         {filtered.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-            No talkgroups found.
-          </div>
+          <div className="empty-note">No talkgroups found.</div>
         ) : (
           <table className="tactical-table">
             <thead>
               <tr>
-                <th style={{ width: '80px' }}>TGID</th>
+                <th className="pin-col" aria-label="Pinned" />
+                <th className="w80">TGID</th>
                 <th>Talkgroup Name / Alias</th>
                 <th className="hide-sm">Group / Tag</th>
-                <th style={{ width: '75px' }}>Calls</th>
-                <th className="hide-sm" style={{ width: '85px' }}>Airtime</th>
-                <th style={{ width: '85px' }}><span className="hide-sm">Security</span></th>
-                <th className="hide-sm" style={{ width: '80px' }}>Last Seen</th>
+                <th className="w75">Calls</th>
+                <th className="hide-sm w85">Airtime</th>
+                <th className="w85"><span className="hide-sm">Security</span></th>
+                <th className="hide-sm w80">Last Seen</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((tg) => (
+              {ordered.map((tg) => (
                 <tr key={tg.id}>
-                  <td className="mono" style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                    {tg.tgid}
-                  </td>
+                  <td className="pin-col"><PinButton tgid={tg.tgid} /></td>
+                  <td className="mono-cyan"><EntityLink kind="tg" id={tg.tgid}>{tg.tgid}</EntityLink></td>
 
                   <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                      {tg.alias || `TG ${tg.tgid}`}
-                    </div>
+                    <div className="tg-name-cell"><EntityLink kind="tg" id={tg.tgid}>{tg.alias || `TG ${tg.tgid}`}</EntityLink></div>
                     {(tg.tg_group || tg.tg_tag) && (
-                      <div className="show-sm" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                      <div className="show-sm tg-sub">
                         {tg.tg_group || tg.tg_tag} · {formatLastSeen(tg.last_seen)}
                       </div>
                     )}
                   </td>
 
-                  <td className="hide-sm" style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                    {tg.tg_group || tg.tg_tag || '—'}
+                  <td className="hide-sm cell-sm text-muted">
+                    {(() => {
+                      const cat = getTalkgroupCategory(tg.alias, tg.tg_group, tg.tg_tag);
+                      return (
+                        <span className="cat-tag" style={{ '--cat': cat.color } as React.CSSProperties} title={cat.fullLabel}>
+                          {cat.label}
+                        </span>
+                      );
+                    })()}
+                    {(tg.tg_group || tg.tg_tag) && <span className="tg-group">{tg.tg_group || tg.tg_tag}</span>}
                   </td>
 
-                  <td className="mono" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
-                    {tg.call_count.toLocaleString()}
-                  </td>
+                  <td className="cell-mono tg-calls">{tg.call_count.toLocaleString()}</td>
 
-                  <td className="mono hide-sm" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
-                    {formatAirtime(tg.total_ms)}
-                  </td>
+                  <td className="cell-mono hide-sm cell-sm text-dim nowrap">{formatAirtime(tg.total_ms)}</td>
 
                   <td>
                     {tg.encrypted ? (
@@ -125,9 +119,7 @@ export const TalkgroupDirectory: React.FC<TalkgroupDirectoryProps> = ({ talkgrou
                     )}
                   </td>
 
-                  <td className="mono hide-sm" style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>
-                    {formatLastSeen(tg.last_seen)}
-                  </td>
+                  <td className="cell-mono hide-sm cell-sm text-dim">{formatLastSeen(tg.last_seen)}</td>
                 </tr>
               ))}
             </tbody>

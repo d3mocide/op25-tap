@@ -1,0 +1,115 @@
+/* Call history table */
+.call-table .c-time { width: 74px; }
+.call-table .c-sys { width: 84px; }
+.call-table .c-svc { width: 56px; text-align: center; }
+.call-table .c-tg { min-width: 135px; }
+.call-table .c-freq { width: 92px; }
+.call-table .c-src { width: 78px; }
+.call-table .c-dur { width: 56px; }
+.call-table th { white-space: nowrap; }
+.call-sys { font-size: 0.75rem; }
+.call-sys-label { color: var(--sys); font-weight: 700; }
+.call-sep { color: var(--text-dim); margin: 0 3px; }
+.call-alias { font-size: 0.68rem; }
+
+/* Mobile call rows */
+.call-row-id { font-size: 0.68rem; flex-shrink: 0; }
+.call-row-time { margin-left: auto; font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-muted); flex-shrink: 0; }
+.call-row-sub { font-size: 0.72rem; color: var(--text-dim); }
+.call-row-tail { margin-left: auto; flex-shrink: 0; }
+
+/* Voice intercepts */
+.auto-h { height: auto; }
+.panel-search.wide { min-width: 220px; }
+.xcript-list { max-height: 420px; display: flex; flex-direction: column; gap: 10px; }
+.xcript-empty svg { display: block; margin: 0 auto 8px; color: var(--text-dim); opacity: 0.5; }
+.xcript-empty { padding: 36px 20px; }
+
+.xcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgb(15 16 20 / 0.55);
+  border: 1px solid var(--border-subtle);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.xcript.playing { background: rgb(0 229 255 / 0.05); border-color: rgb(0 229 255 / 0.35); }
+.xcript-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.xcript-meta-l { gap: 10px; }
+.xcript-time { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.xcript-sys {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--sys);
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid color-mix(in srgb, var(--sys) 31%, transparent);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.xcript-tg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+.xcript-tg-name { font-size: 0.78rem; font-weight: 700; color: var(--tg); }
+.xcript-src { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted); }
+.xcript-src strong { color: var(--accent-cyan); }
+.xcript-alias { color: var(--text-dim); margin-left: 4px; }
+.xcript-freq { font-size: 0.74rem; }
+
+.play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  color: var(--accent-cyan);
+  background: rgb(0 229 255 / 0.12);
+  border: 1px solid rgb(0 229 255 / 0.4);
+  transition: all 0.15s ease;
+}
+.play-btn:hover { background: rgb(0 229 255 / 0.2); }
+.play-btn.stop { color: #ef4444; background: rgb(239 68 68 / 0.2); border-color: #ef4444; }
+
+.xcript-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: 0 4px 4px 0;
+  background: rgb(0 229 255 / 0.04);
+}
+.xcript-bubble svg { flex-shrink: 0; }
+.xcript-bubble span { font-size: 0.8rem; font-weight: 500; line-height: 1.4; letter-spacing: 0.01em; color: #f1f5f9; }
+.xcript-pending { padding-left: 4px; font-size: 0.74rem; font-style: italic; color: var(--text-dim); }
+
+.xcript-src .xcript-rid { color: var(--accent-cyan); font-weight: 700; }
+.xcript-bubble mark { background: rgb(251 191 36 / 0.25); color: #fde68a; border-radius: 2px; padding: 0 1px; }
+.jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid var(--border-button);
+}
+.jump-btn:hover { color: var(--text-main); border-color: var(--text-dim); }

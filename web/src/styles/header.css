@@ -1,0 +1,32 @@
+.hdr-name { margin: 0; font-size: 1.1rem; font-weight: 800; letter-spacing: -0.01em; }
+.hdr-name span { color: var(--accent-cyan); }
+.hdr-subtitle .hl,
+.hdr-value .hl { color: var(--accent-cyan); }
+.hdr-subtitle .strong { font-weight: 600; }
+
+.hdr-label { font-size: 0.66rem; text-transform: uppercase; color: var(--text-dim); font-weight: 700; }
+.hdr-value { font-family: var(--font-mono); font-size: 0.86rem; font-weight: 600; color: var(--text-main); }
+.hdr-value.white { color: #fff; font-weight: 700; }
+.hdr-value.cyan { color: var(--accent-cyan); }
+.hdr-value.ok { color: var(--accent-emerald); }
+.hdr-value.bad { color: var(--accent-fire); }
+.hdr-value.bold { font-weight: 700; }
+.hdr-value .sep { color: var(--text-dim); }
+.hdr-aside { font-size: 0.7rem; font-weight: 400; color: var(--text-dim); }
+
+.hdr-metric.w85 { min-width: 85px; }
+.hdr-metric.w95 { min-width: 95px; }
+.hdr-metric.w110 { min-width: 110px; }
+.hdr-metric.w135 { min-width: 135px; }
+.hdr-metric.w150 { min-width: 150px; }
+
+.hdr-audio-btn { padding: 4px 10px; font-size: 0.74rem; letter-spacing: 0.04em; gap: 6px; flex-shrink: 0; }
+.hdr-audio-label { font-weight: 700; }
+.hdr-audio-divider { width: 1px; height: 20px; flex-shrink: 0; background: var(--border-subtle); }
+.hdr-mute { padding: 4px 6px; width: 28px; flex-shrink: 0; color: var(--text-dim); }
+.hdr-mute.playing { color: var(--accent-cyan); }
+.hdr-mute.muted { color: var(--accent-fire); }
+.hdr-volume { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.hdr-volume .audio-slider { width: 64px; flex-shrink: 0; }
+.hdr-vol-read { width: 28px; text-align: center; font-size: 0.7rem; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
+.hdr-vol-read.muted { color: var(--accent-fire); }

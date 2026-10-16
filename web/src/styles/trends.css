@@ -1,0 +1,72 @@
+.trends-title { margin: 0 8px 0 0; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+/* Each tile carries a thin accent line in its metric's colour */
+.stat-tile { --tile: var(--accent-cyan); position: relative; overflow: hidden; }
+.stat-tile::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--tile), transparent 75%);
+  opacity: 0.8;
+}
+.stat-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.stat-tile .stat-value { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.01em; }
+.stat-sub { font-size: 0.72rem; }
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+.chart-head .stat-label { margin: 0; }
+.chart-hint { font-size: 0.72rem; color: var(--text-dim); }
+
+.leader-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: 16px;
+}
+.rank-col { width: 28px; }
+.leader-name { display: flex; align-items: center; gap: 6px; color: var(--text-main); }
+.leader-id { font-size: 0.7rem; }
+
+/* Calls cell doubles as a data bar: width comes from --pct */
+.leader-calls { position: relative; }
+.leader-calls::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: var(--pct, 0%);
+  max-width: 100%;
+  background: linear-gradient(270deg, rgb(0 229 255 / 0.16), transparent);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.leader-calls span { position: relative; }
+
+/* Charts */
+.bar-timeline { position: relative; width: 100%; user-select: none; }
+.bar-svg { display: block; touch-action: pan-y; }
+.bar-svg.selectable { cursor: crosshair; }
+.bar-tip { top: -8px; transform: translateY(-100%); }
+.bar-tip-title { margin-bottom: 2px; }
+.bar-tip-alerts { color: var(--accent-amber); }
+.bar-tip-hint { color: var(--text-dim); margin-top: 2px; }
+
+.spark { position: relative; display: inline-block; line-height: 0; }
+.spark-tip { top: -6px; transform: translate(-50%, -100%); line-height: 1.4; }
+.skel-tile { min-height: 96px; }

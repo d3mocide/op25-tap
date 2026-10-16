@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 
 interface SparklineProps {
   values: number[];
@@ -14,6 +14,7 @@ export const Sparkline: React.FC<SparklineProps> = ({
   values, labels, width = 120, height = 28, format = (v) => v.toLocaleString(), color = 'var(--accent-cyan)',
 }) => {
   const [hover, setHover] = useState<number | null>(null);
+  const gid = useId();
   const n = values.length;
   if (n < 2) return null;
 
@@ -26,7 +27,7 @@ export const Sparkline: React.FC<SparklineProps> = ({
   const focus = hover ?? n - 1;
 
   return (
-    <span style={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
+    <span className="spark">
       <svg
         width={width}
         height={height}
@@ -39,7 +40,13 @@ export const Sparkline: React.FC<SparklineProps> = ({
         }}
         onPointerLeave={() => setHover(null)}
       >
-        <path d={area} fill={color} opacity={0.12} />
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
         {hover !== null && (
           <line x1={x(hover)} x2={x(hover)} y1={0} y2={height} stroke="var(--text-dim)" strokeWidth={1} />
@@ -48,8 +55,8 @@ export const Sparkline: React.FC<SparklineProps> = ({
       </svg>
       {hover !== null && (
         <span
-          className="chart-tooltip"
-          style={{ left: x(hover), top: -6, transform: 'translate(-50%, -100%)', lineHeight: 1.4 }}
+          className="chart-tooltip spark-tip"
+          style={{ left: x(hover) }}
         >
           {labels[hover]} · <strong>{format(values[hover])}</strong>
         </span>

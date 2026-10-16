@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, History, Radio } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { TimeRange } from '../types';
 import { addDays, formatRange, fromInputValue, startOfDay, toInputValue } from '../utils/time';
 
@@ -35,8 +35,13 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
     setCustom(null);
     onChange(next);
   };
+  // History entered from the mode toggle is a plain "last 24h" range with no remembered preset.
   const activePreset =
-    range && lastPreset && lastPreset.from === range.from && lastPreset.to === range.to ? lastPreset.key : null;
+    range && lastPreset && lastPreset.from === range.from && lastPreset.to === range.to
+      ? lastPreset.key
+      : range && range.to - range.from === 86400 && Math.abs(range.to - nowSec()) < 120
+        ? '24h'
+        : null;
 
   // Shift by the range's own length; whole-day ranges step by calendar days (DST-safe).
   const shift = (dir: -1 | 1) => {
@@ -61,21 +66,10 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
   const parsed = { from: fromInputValue(customFrom), to: fromInputValue(customTo) };
   const customValid = parsed.from !== null && parsed.to !== null && parsed.to > parsed.from;
 
+  if (!range) return null;
+
   return (
     <div className="range-bar">
-      <div className="segmented" role="group" aria-label="Data mode">
-        <button className={!range ? 'on' : ''} onClick={() => onChange(null)} aria-pressed={!range}>
-          <Radio size={13} /> Live
-        </button>
-        <button
-          className={range ? 'on' : ''}
-          aria-pressed={!!range}
-          onClick={() => !range && apply(PRESETS[1].make(nowSec()), '24h')}
-        >
-          <History size={13} /> History
-        </button>
-      </div>
-
       {range && (
         <>
           <div className="range-presets">
@@ -91,21 +85,20 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
           ))}
           </div>
 
-          <div className="range-step" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
-            <button className="btn" style={{ padding: '4px 6px' }} onClick={() => shift(-1)} disabled={!canBack} title="Previous period" aria-label="Previous period">
+          <div className="range-step">
+            <button className="btn range-nav" onClick={() => shift(-1)} disabled={!canBack} title="Previous period" aria-label="Previous period">
               <ChevronLeft size={14} />
             </button>
-            <strong className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-main)', padding: '0 4px' }}>
+            <strong className="mono range-label">
               {formatRange(range.from, range.to)}
             </strong>
-            <button className="btn" style={{ padding: '4px 6px' }} onClick={() => shift(1)} disabled={!canForward} title="Next period" aria-label="Next period">
+            <button className="btn range-nav" onClick={() => shift(1)} disabled={!canForward} title="Next period" aria-label="Next period">
               <ChevronRight size={14} />
             </button>
           </div>
 
           <form
             className="range-custom"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}
             onSubmit={(e) => {
               e.preventDefault();
               if (customValid) apply({ from: parsed.from!, to: parsed.to! });
@@ -120,7 +113,7 @@ export const TimeRangeBar: React.FC<TimeRangeBarProps> = ({ range, onChange, his
               max={maxInput}
               onChange={(e) => setCustom({ from: e.target.value, to: customTo })}
             />
-            <span className="range-to" style={{ color: 'var(--text-dim)', fontSize: '0.74rem' }}>to</span>
+            <span className="range-to">to</span>
             <input
               type="datetime-local"
               className="input-dt"

@@ -1,7 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import type { Anomaly } from '../types';
 import { formatTs } from '../utils/time';
+import { EntityLink } from './EntityLink';
+
+/** Turns "RID 123" / "TG 456" in an alert's text into drawer links. */
+function linkify(text: string): React.ReactNode[] {
+  return text.split(/((?:RID|TG) \d+)/g).map((part, i) => {
+    const m = /^(RID|TG) (\d+)$/.exec(part);
+    return m ? (
+      <EntityLink key={i} kind={m[1] === 'RID' ? 'rid' : 'tg'} id={Number(m[2])}>{part}</EntityLink>
+    ) : (
+      part
+    );
+  });
+}
+
+interface KindMeta {
+  label: string;
+  color: string;
+}
+
+/** Severity by colour: spikes are the loud ones, new radios on known talkgroups are routine. */
+const KIND_META: Record<string, KindMeta> = {
+  spike: { label: 'SPIKE', color: 'var(--accent-fire)' },
+  new_rid: { label: 'NEW RID', color: 'var(--accent-amber)' },
+  new_tg: { label: 'NEW TG', color: 'var(--accent-purple)' },
+  new_site: { label: 'NEW SITE', color: 'var(--accent-cyan)' },
+  new_rid_at_site: { label: 'RID AT SITE', color: 'var(--accent-blue)' },
+  new_rid_on_tg: { label: 'RID ON TG', color: 'var(--text-muted)' },
+};
 
 interface AnomaliesPanelProps {
   anomalies: Anomaly[];
@@ -10,79 +38,69 @@ interface AnomaliesPanelProps {
 export const AnomaliesPanel: React.FC<AnomaliesPanelProps> = ({ anomalies }) => {
   const formatTime = (ts: number) => formatTs(ts);
 
-  const getKindBadge = (kind: string) => {
-    switch (kind) {
-      case 'new_rid':
-        return <span className="badge badge-amber">NEW RID</span>;
-      case 'new_tg':
-        return <span className="badge badge-purple">NEW TG</span>;
-      case 'spike':
-        return <span className="badge badge-rose">SPIKE</span>;
-      case 'new_site':
-        return <span className="badge badge-cyan">NEW SITE</span>;
-      default:
-        return <span className="badge badge-muted">{kind.toUpperCase()}</span>;
-    }
-  };
+  const kinds = KIND_META;
+  const [kindFilter, setKindFilter] = useState<string | null>(null);
+  const counts = anomalies.reduce<Record<string, number>>((m, a) => {
+    m[a.kind] = (m[a.kind] ?? 0) + 1;
+    return m;
+  }, {});
+  const shown = kindFilter ? anomalies.filter((a) => a.kind === kindFilter) : anomalies;
+  const meta = (kind: string): KindMeta => kinds[kind] ?? { label: kind.replace(/_/g, ' ').toUpperCase(), color: 'var(--text-dim)' };
 
   return (
-    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ShieldAlert size={16} color="var(--accent-rose)" />
-          <h2 style={{ fontSize: '0.86rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, color: 'var(--text-dim)' }}>
-            System Alerts & Forensics
-          </h2>
-          <span className={`badge ${anomalies.length > 0 ? 'badge-rose' : 'badge-muted'} mono`} style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+    <div className="glass-panel panel-col">
+      <div className="panel-header">
+        <div className="panel-title">
+          <ShieldAlert size={16} color="var(--accent-fire)" />
+          <h2>System Alerts & Forensics</h2>
+          <span className={`badge ${anomalies.length > 0 ? 'badge-rose' : 'badge-muted'} mono badge-sm`}>
             {anomalies.length}
           </span>
         </div>
       </div>
 
+      {anomalies.length > 0 && (
+        <div className="alert-filters">
+          <button type="button" className={`chip ${kindFilter === null ? 'on' : ''}`} onClick={() => setKindFilter(null)}>
+            All <span className="mono">{anomalies.length}</span>
+          </button>
+          {Object.keys(counts).sort((a, b) => counts[b] - counts[a]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={`chip ${kindFilter === k ? 'on' : ''}`}
+              style={{ '--chip': meta(k).color } as React.CSSProperties}
+              onClick={() => setKindFilter(kindFilter === k ? null : k)}
+            >
+              <span className="chip-dot" />{meta(k).label} <span className="mono">{counts[k]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* List */}
-      <div className="panel-scroll" style={{ flex: 1, overflowY: 'auto', maxHeight: '550px', padding: '12px' }}>
+      <div className="panel-scroll tall pad">
         {anomalies.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-            No anomaly events detected. System operating normally.
-          </div>
+          <div className="empty-note">No anomaly events detected. System operating normally.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {anomalies.map((anom) => (
+          <div className="stack-tight">
+            {shown.map((anom) => (
               <div
                 key={anom.id}
-                style={{
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '10px 12px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: '12px'
-                }}
+                className="alert-row"
+                style={{ '--accent': meta(anom.kind).color } as React.CSSProperties}
               >
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    {getKindBadge(anom.kind)}
-                    <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                      {formatTime(anom.ts)}
-                    </span>
+                  <div className="row alert-head">
+                    <span className="alert-kind">{meta(anom.kind).label}</span>
+                    <span className="mono-dim alert-time">{formatTime(anom.ts)}</span>
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-main)', fontWeight: 500 }}>
-                    {anom.details}
-                  </div>
+                  <div className="alert-details">{linkify(anom.details)}</div>
                   {(anom.radio_alias || anom.tg_alias) && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {anom.radio_alias && `Radio: ${anom.radio_alias}`}
+                    <div className="alert-who">
+                      {anom.radio_alias && <>Radio: <EntityLink kind="rid" id={anom.rid}>{anom.radio_alias}</EntityLink></>}
                       {anom.radio_alias && anom.tg_alias && ' | '}
-                      {anom.tg_alias && `Talkgroup: ${anom.tg_alias}`}
+                      {anom.tg_alias && <>Talkgroup: <EntityLink kind="tg" id={anom.tgid}>{anom.tg_alias}</EntityLink></>}
                     </div>
                   )}
                 </div>

@@ -1,0 +1,33 @@
+.nowbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--glass);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+.nowbar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+.nowbar-quiet { font-size: 0.76rem; color: var(--text-dim); }
+.nowbar-calls { display: flex; align-items: center; gap: 14px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.nowbar-calls::-webkit-scrollbar { display: none; }
+.nowbar-call { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; font-size: 0.8rem; transition: opacity 0.2s ease; }
+.nowbar-call.dim { opacity: 0.4; }
+.nowbar-tg { font-weight: 700; color: var(--tg); }
+.nowbar-src { font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent-cyan); }
+.nowbar-enc { padding: 0 5px; border-radius: 3px; font-size: 0.62rem; font-weight: 800; color: var(--accent-fire); border: 1px solid rgb(248 113 113 / 0.4); background: rgb(248 113 113 / 0.1); }
+.nowbar-time { font-family: var(--font-display); font-size: 0.86rem; color: var(--text-muted); min-width: 34px; }
