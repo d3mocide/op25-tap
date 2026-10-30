@@ -67,8 +67,10 @@ On a wide screen the Subscribers tab fills the window, and the radio pings show 
 ```sh
 git clone https://github.com/d3mocide/op25-tap && cd op25-tap
 cp .env.example .env          # set OP25_URL to your OP25 HTTP endpoint
-docker compose up -d --build  # UI on http://localhost:8000
+docker compose up -d          # pulls ghcr.io/d3mocide/op25-tap, UI on http://localhost:8000
 ```
+
+Pin a release with `OP25TAP_TAG=0.1.0` in `.env`, and update with `docker compose pull && docker compose up -d`. To build from source instead, use `docker compose -f docker-compose.build.yml up -d --build`. `make help` lists these shortcuts.
 
 That is enough for live monitoring. Add `WHISPER_URL` for transcripts, and see [Configuration](#configuration) for retention, time zone and multi-receiver setups. It runs on a 64-bit Raspberry Pi (arm64), which is where it is developed.
 
@@ -147,7 +149,7 @@ Requires Docker, or Python 3.12 with [`uv`](https://docs.astral.sh/uv/) and Node
 
 ```sh
 # Backend and frontend in Docker with hot reload (UI on :5173)
-docker compose -f docker-compose.dev.yml up --build -d
+make dev   # or: docker compose -f docker-compose.dev.yml up --build -d
 
 # Backend tests
 uv venv && uv pip install -r requirements.txt pytest httpx2
@@ -181,8 +183,11 @@ op25-tap/
 │   ├── e2e/              # Playwright smoke tests
 │   ├── docs/             # UI guide, screenshots, README banner
 │   └── public/           # Icons and web manifest
-├── Dockerfile            # Multi-stage build (frontend, then Python runtime)
-└── docker-compose.yml
+├── Dockerfile                # Multi-stage build (frontend, then Python runtime)
+├── docker-compose.yml        # Pulls the published image
+├── docker-compose.build.yml  # Builds the image locally
+├── docker-compose.dev.yml    # Hot-reload dev stack
+└── Makefile                  # make help
 ```
 
 </details>

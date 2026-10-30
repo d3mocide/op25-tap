@@ -14,6 +14,8 @@ RUN npm run build
 # Stage 2: Python Backend Runtime
 # ==============================================================================
 FROM python:3.12-slim
+LABEL org.opencontainers.image.source="https://github.com/d3mocide/op25-tap" \
+      org.opencontainers.image.licenses="GPL-3.0"
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
