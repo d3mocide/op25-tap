@@ -1,6 +1,8 @@
+# Production: pulls the published image. Set OP25TAP_TAG to pin a release.
+# To build from source instead: docker compose -f docker-compose.build.yml up -d --build
 services:
   op25-tap:
-    build: .
+    image: ghcr.io/d3mocide/op25-tap:${OP25TAP_TAG:-latest}
     container_name: op25-tap
     restart: unless-stopped
     ports:
